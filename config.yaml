@@ -1,0 +1,48 @@
+%YAML:1.3
+objects:
+    - name      : champion_copper_plus_spark_plug
+      num_calib : 3
+    - name      : cheezit_big_original
+      num_calib : 5
+    - name      : crayola_64_ct
+      num_calib : 4
+    - name      : elmers_washable_no_run_school_glue
+      num_calib : 2
+    - name      : expo_dry_erase_board_eraser
+      num_calib : 5
+    - name      : feline_greenies_dental_treats
+      num_calib : 2
+    - name      : first_years_take_and_toss_straw_cups
+      num_calib : 0
+    - name      : genuine_joe_plastic_stir_sticks
+      num_calib : 5
+    - name      : highland_6539_self_stick_notes
+      num_calib : 2
+    - name      : kong_air_dog_squeakair_tennis_ball
+      num_calib : 0
+    - name      : kong_duck_dog_toy
+      num_calib : 0
+    - name      : kong_sitting_frog_dog_toy
+      num_calib : 0
+    - name      : kygen_squeakin_eggs_plush_puppies
+      num_calib : 0
+    - name      : mark_twain_huckleberry_finn
+      num_calib : 2
+    - name      : mead_index_cards
+      num_calib : 0
+    - name      : mommys_helper_outlet_plugs
+      num_calib : 0
+    - name      : munchkin_white_hot_duck_bath_toy
+      num_calib : 0
+    - name      : oreo_mega_stuf
+      num_calib : 3
+    - name      : paper_mate_12_count_mirado_black_warrior
+      num_calib : 2
+    - name      : rollodex_mesh_collection_jumbo_pencil_cup
+      num_calib : 0
+    - name      : safety_works_safety_glasses
+      num_calib : 0
+    - name      : sharpie_accent_tank_style_highlighters
+      num_calib : 2
+    - name      : stanley_66_052
+      num_calib : 0
