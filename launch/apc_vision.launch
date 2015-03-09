@@ -1,0 +1,6 @@
+<launch>
+    <node name="camera_driver" pkg="softkinetic_camera" type="softkinetic_driver_node"/>
+    <node name="test_tf" pkg="tf" type="static_transform_publisher"
+          args=".47 -.135 .13 0 0 -1.57059632679 /shelf /softkinetic_camera_depth_optical_frame 100"/>
+    <node name="vision" pkg="apc_vision" type="apc_vision_node"/>
+</launch>
