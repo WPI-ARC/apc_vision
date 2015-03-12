@@ -105,7 +105,7 @@ float ObjectRecognizer::detect(cv::Mat color) {
             scene.push_back( img_keypoints[ good_matches[i].trainIdx ].pt );
         }
 
-        std::cout << good_matches.size() << std::endl;
+        //std::cout << good_matches.size() << std::endl;
 
         if(good_matches.size() >= min_matches) {
             // Find homography from the calibration image to the current frame.

@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf_conversions
   cv_bridge
+  message_generation
 )
 
 find_package(Boost 1.50 REQUIRED COMPONENTS filesystem)
@@ -58,11 +59,10 @@ find_package(PCL 1.7 REQUIRED)# common features kdtree search filters segmentati
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+    FILES
+    ObjectDetect.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -72,10 +72,10 @@ find_package(PCL 1.7 REQUIRED)# common features kdtree search filters segmentati
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+    DEPENDENCIES
+    geometry_msgs
+)
 
 ###################################
 ## catkin specific configuration ##

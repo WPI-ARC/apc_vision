@@ -40,6 +40,7 @@
 #include <iostream>
 
 #include "ObjectRecognizer.h"
+#include "apc_vision/ObjectDetect.h"
 
 const static float dims[][3] = {
     { .225, .06, .158 }, 
@@ -83,8 +84,8 @@ public:
         image_sub(nh.subscribe(image_topic, 1, &Segmenter::image_cb, this)),
         sync(pointcloud_sub, uv_sub, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
+        server(nh.advertiseService("object_detect", &Segmenter::service_cb, this))
         //marker_pub(nh.advertise<visualization_msgs::MarkerArray>(marker_topic, 1)),
-        obj(obj)
     {
         sync.registerCallback(boost::bind(&Segmenter::process, this, _1, _2));
 
@@ -102,14 +103,16 @@ protected:
 
     ros::Publisher pointcloud_pub;
     //ros::Publisher marker_pub;
+    ros::ServiceServer server;
 
     tf::TransformListener listener;
 
     sensor_msgs::ImageConstPtr lastImage;
 
-    std::string obj;
-
     std::map<std::string, ObjectRecognizer> objDetectors;
+
+    sensor_msgs::PointCloud2::ConstPtr lastPC;
+    sensor_msgs::PointCloud2::ConstPtr lastUVC;
 
     void image_cb(const sensor_msgs::ImageConstPtr& img) {
         lastImage = img;
@@ -117,18 +120,29 @@ protected:
 
     void process(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
                  const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
+        lastPC = pc_msg;
+        lastUVC = uv_msg;
+    }
+
+    bool service_cb(apc_vision::ObjectDetect::Request& request, apc_vision::ObjectDetect::Response& response) {
+        response.found = false;
+        response.position.x = 0;
+        response.position.y = 0;
+        response.position.z = 0;
+
+        if(!lastPC.get()) return true;
+        if(!lastUVC.get()) return true;
 
         pcl::PCLPointCloud2 uv_pc2, pc_pc2;
 
-        pcl_conversions::toPCL(*pc_msg,pc_pc2);
-        pcl_conversions::toPCL(*uv_msg,uv_pc2);
+        pcl_conversions::toPCL(*lastPC,pc_pc2);
+        pcl_conversions::toPCL(*lastUVC,uv_pc2);
 
-        PointCloud::Ptr out (new PointCloud);
-        UVCloud::Ptr uvcloud (new UVCloud);
+        PointCloud::Ptr out(new PointCloud);
+        UVCloud::Ptr uvcloud(new UVCloud);
 
         pcl::fromPCLPointCloud2(pc_pc2, *out);
         pcl::fromPCLPointCloud2(uv_pc2, *uvcloud);
-
         // --------------------------------
         // Transform cloud to shelf-space
         // --------------------------------
@@ -140,7 +154,7 @@ protected:
         // Wait up to 2 seconds for transform.
         bool success = listener.waitForTransform(shelf_frame, camera_frame, now, ros::Duration(2.0));
         // If transform isn't found in that time, give up
-        if(!success) return;
+        if(!success) return true;
         // Otherwise, get the transform
         listener.lookupTransform(shelf_frame, camera_frame, now, transform);
         // Get an eigen transform from the tf one
@@ -256,20 +270,37 @@ protected:
                 } 
 
                 if(img_ptr.get()) {
-                    if(objDetectors.find(obj) == objDetectors.end()) {
-                        return;
+                    if(objDetectors.find(request.object) == objDetectors.end()) {
+                        return true;
                     }
 
-                    float score = objDetectors[obj].detect(
+                    float score = objDetectors[request.object].detect(
                         img_ptr->image.rowRange(min_y, max_y)
                                       .colRange(min_x, max_x)
                     );
                     if(score > 0) {
+                        float x=0;
+                        float y=0;
+                        float z=0;
+                        int n=0;
                         for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
                             out->points[*pit].r = 0;
                             out->points[*pit].g = 0;
                             out->points[*pit].b = 255 - 50*i;
+                            x += out->points[*pit].x;
+                            y += out->points[*pit].y;
+                            z += out->points[*pit].z;
+                            n++;
                         }
+
+                        x /= n;
+                        y /= n;
+                        z /= n;
+
+                        response.found = true;
+                        response.position.x = x;
+                        response.position.y = y;
+                        response.position.z = z;
                     }
                 }
             }
@@ -339,6 +370,7 @@ protected:
 
         //marker_pub.publish(array_msg);
         pointcloud_pub.publish(out);
+        return true;
     }
 };
 
