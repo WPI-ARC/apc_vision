@@ -12,8 +12,10 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
 )
 
+find_package(Boost 1.50 REQUIRED COMPONENTS filesystem)
+
 ## Find PCL
-find_package(PCL 1.5 REQUIRED)
+find_package(PCL 1.7 REQUIRED)# common features kdtree search filters segmentation)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -102,9 +104,7 @@ add_definitions(${PCL_DEFINITIONS})
 # include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
-)
-
-include_directories(	
+  ${Boost_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
 )
 
@@ -114,7 +114,7 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(apc_vision_node src/apc_vision_node.cpp)
+add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -123,6 +123,7 @@ add_executable(apc_vision_node src/apc_vision_node.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(apc_vision_node
   ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
   ${PCL_LIBRARIES}
 )
 
