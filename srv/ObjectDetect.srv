@@ -1,4 +1,5 @@
 string object
+string bin
 ---
 bool found
-geometry_msgs/Point position
+geometry_msgs/PoseStamped pose

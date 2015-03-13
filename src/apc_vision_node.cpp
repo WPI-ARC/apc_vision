@@ -42,14 +42,6 @@
 #include "ObjectRecognizer.h"
 #include "apc_vision/ObjectDetect.h"
 
-const static float dims[][3] = {
-    { .225, .06, .158 }, 
-    { .13, .055, .035 },
-    { .155, .04, .05 },
-    { .145, .035, .06 },
-    { .12, .06, .13 },
-};
-
 bool close_to(float x, float y, float tolerance_lower, float tolerance_upper) {
     return (x >= y-tolerance_lower) && (x <= y+tolerance_upper);
 }
@@ -74,22 +66,29 @@ struct ObjInfo {
     std::vector<std::string> calibFiles;
 };
 
-typedef std::map<std::string, ObjInfo> ConfigMap;
+struct Config {
+    typedef std::map<std::string, ObjInfo> CalibMap;
+    CalibMap calib;
+
+    typedef std::map<std::string, std::vector<int> > BinLimitsMap;
+    BinLimitsMap bin_limits;
+};
 
 class Segmenter {
 public:
-    Segmenter(ros::NodeHandle& nh, std::string obj, ConfigMap config) :
+    Segmenter(ros::NodeHandle& nh, std::string obj, Config config) :
         pointcloud_sub(nh, xyz_topic, 1),
         uv_sub(nh, uv_topic, 1),
         image_sub(nh.subscribe(image_topic, 1, &Segmenter::image_cb, this)),
         sync(pointcloud_sub, uv_sub, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
-        server(nh.advertiseService("object_detect", &Segmenter::service_cb, this))
+        server(nh.advertiseService("object_detect", &Segmenter::service_cb, this)),
+        config(config)
         //marker_pub(nh.advertise<visualization_msgs::MarkerArray>(marker_topic, 1)),
     {
         sync.registerCallback(boost::bind(&Segmenter::process, this, _1, _2));
 
-        for(ConfigMap::iterator it = config.begin(); it != config.end(); it++) {
+        for(Config::CalibMap::iterator it = config.calib.begin(); it != config.calib.end(); it++) {
             objDetectors[it->first] = ObjectRecognizer(it->second.calibFiles);
         }
     }
@@ -109,6 +108,7 @@ protected:
 
     sensor_msgs::ImageConstPtr lastImage;
 
+    Config config;
     std::map<std::string, ObjectRecognizer> objDetectors;
 
     sensor_msgs::PointCloud2::ConstPtr lastPC;
@@ -126,9 +126,6 @@ protected:
 
     bool service_cb(apc_vision::ObjectDetect::Request& request, apc_vision::ObjectDetect::Response& response) {
         response.found = false;
-        response.position.x = 0;
-        response.position.y = 0;
-        response.position.z = 0;
 
         if(!lastPC.get()) return true;
         if(!lastUVC.get()) return true;
@@ -168,21 +165,24 @@ protected:
         pcl::PassThrough<PointT> filter;
         pcl::IndicesPtr indices(new std::vector<int>);
 
+        if(config.bin_limits.find(request.bin) == config.bin_limits.end()) return true;
+        std::vector<int>& limits = config.bin_limits[request.bin];
+
         filter.setInputCloud(out);
         filter.setFilterFieldName("x");
-        filter.setFilterLimits(.285, 0.580);
+        filter.setFilterLimits(limits[0], limits[1]);
         filter.filter(*indices);
 
         filter.setInputCloud(out);
         filter.setIndices(indices);
         filter.setFilterFieldName("y");
-        filter.setFilterLimits(0, 0.44);
+        filter.setFilterLimits(limits[2], limits[3]);
         filter.filter(*indices);
 
         filter.setInputCloud(out);
         filter.setIndices(indices);
         filter.setFilterFieldName("z");
-        filter.setFilterLimits(0.035, 0.26);
+        filter.setFilterLimits(limits[4], limits[5]);
         filter.filter(*indices);
 
         pcl::StatisticalOutlierRemoval<PointT> sor;
@@ -191,12 +191,6 @@ protected:
         sor.setMeanK (50);
         sor.setStddevMulThresh (1.0);
         sor.filter (*indices);
-
-        /*for(int i = 0; i < indices->size(); i++) {
-            out->points[i].r = 0;
-            out->points[i].g = 0;
-            out->points[i].b = 0;
-        }*/
 
         // ------------------------------
         // Cluster extraction
@@ -298,9 +292,14 @@ protected:
                         z /= n;
 
                         response.found = true;
-                        response.position.x = x;
-                        response.position.y = y;
-                        response.position.z = z;
+                        response.pose.header.frame_id = "/shelf";
+                        response.pose.pose.position.x = x;
+                        response.pose.pose.position.y = y;
+                        response.pose.pose.position.z = z;
+                        response.pose.pose.orientation.x = 0.0;
+                        response.pose.pose.orientation.y = 0.0;
+                        response.pose.pose.orientation.z = 0.0;
+                        response.pose.pose.orientation.w = 1.0;
                     }
                 }
             }
@@ -378,8 +377,8 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "object_segmentation");
     ros::NodeHandle nh;
 
-    if(argc <= 2) {
-        printf("Please provide config file location and object name");
+    if(argc <= 1) {
+        printf("Please provide config file location");
         return -1;
     }
 
@@ -387,15 +386,17 @@ int main(int argc, char** argv) {
 
     boost::filesystem::path config_path(argv[1]);
 
+    std::cout << boost::filesystem::absolute(config_path).string() << std::endl;
+
     if(!boost::filesystem::exists(config_path) || !boost::filesystem::is_regular_file(config_path)) {
         std::cout << "Specified config file does not exist" << std::endl;
         return -1;
     }
 
-    cv::FileStorage config(config_path.string(), cv::FileStorage::READ);
-    ConfigMap configMap;
+    cv::FileStorage configFile(config_path.string(), cv::FileStorage::READ);
+    Config config;
 
-    for(cv::FileNodeIterator iter = config.root().begin(); iter != config.root().end(); iter++) {
+    for(cv::FileNodeIterator iter = configFile["objects"].begin(); iter != configFile["objects"].end(); iter++) {
         std::string key = (*iter).name();
         std::vector<std::string> value;
 
@@ -410,10 +411,19 @@ int main(int argc, char** argv) {
         }
 
 
-        configMap[key] = ObjInfo(value);
+        config.calib[key] = ObjInfo(value);
     }
 
-    Segmenter segmenter(nh, obj, configMap);
+    for(cv::FileNodeIterator iter = configFile["shelf"].begin(); iter != configFile["shelf"].end(); iter++) {
+        std::string key = (*iter).name();
+        std::vector<int> value;
+        
+        *iter >> value;
+
+        config.bin_limits[key] = value;
+    }
+
+    Segmenter segmenter(nh, obj, config);
 
     ros::spin();
 }

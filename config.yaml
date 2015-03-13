@@ -1,7 +1,21 @@
-%YAML:1.0
-cheezit_big_original: ['images/cheezit.jpg']
-genuine_joe_plastic_stir_sticks: ['images/stirsticks.jpg']
-crayola_64_ct: []
-expo_dry_erase_board_eraser: ['images/expo.jpg']
-elmers_washable_no_run_school_glue: ['images/glue.jpg']
-kygen_squeakin_eggs_plush_puppies: []
+%YAML:1.2
+objects:
+    cheezit_big_original: ['images/cheezit.jpg']
+    genuine_joe_plastic_stir_sticks: ['images/stirsticks.jpg']
+    crayola_64_ct: []
+    expo_dry_erase_board_eraser: ['images/expo.jpg']
+    elmers_washable_no_run_school_glue: ['images/glue.jpg']
+    kygen_squeakin_eggs_plush_puppies: []
+shelf:
+    A: [.005, .415, -.005, -.260, .734, .962]
+    B: [.005, .415, -.272, -.563, .734, .962]
+    C: [.005, .415, -.575, -.833, .734, .962]
+    D: [.005, .415, -.005, -.260, .504, .692]
+    E: [.005, .415, -.272, -.563, .504, .692]
+    F: [.005, .415, -.575, -.833, .504, .692]
+    G: [.005, .415, -.005, -.260, .277, .462]
+    H: [.005, .415, -.272, -.563, .277, .462]
+    I: [.005, .415, -.575, -.833, .277, .462]
+    J: [.005, .415, -.005, -.260, .010, .235]
+    K: [.005, .415, -.272, -.563, .010, .235]
+    L: [.005, .415, -.575, -.833, .010, .235]
