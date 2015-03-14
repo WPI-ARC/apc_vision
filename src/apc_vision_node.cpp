@@ -54,6 +54,7 @@ const static std::string xyz_topic = "/senz3d/points_xyzrgb";
 const static std::string uv_topic = "/senz3d/points_uv";
 const static std::string image_topic = "/senz3d/color";
 const static std::string out_topic = "/object_segmentation/points_xyz";
+const static std::string pose_topic = "/object_segmentation/pose";
 //const static std::string marker_topic = "/object_segmentation/bounding_boxes";
 
 const static std::string shelf_frame = "/shelf";
@@ -82,6 +83,7 @@ public:
         image_sub(nh.subscribe(image_topic, 1, &Segmenter::image_cb, this)),
         sync(pointcloud_sub, uv_sub, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
+        pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
         server(nh.advertiseService("object_detect", &Segmenter::service_cb, this)),
         config(config)
         //marker_pub(nh.advertise<visualization_msgs::MarkerArray>(marker_topic, 1)),
@@ -101,6 +103,7 @@ protected:
     message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> sync;
 
     ros::Publisher pointcloud_pub;
+    ros::Publisher pose_pub;
     //ros::Publisher marker_pub;
     ros::ServiceServer server;
 
@@ -223,16 +226,6 @@ protected:
                 indices_->indices.push_back(*pit);
             }
 
-            pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
-            feature_extractor.setInputCloud(out);
-            feature_extractor.setIndices(indices_);
-            feature_extractor.compute();
-
-            PointT minPoint, maxPoint, position;
-            Eigen::Matrix3f rotation;
-
-            feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
-
             float min_u = 1.0;
             float min_v = 1.0;
             float max_u = 0.0;
@@ -273,33 +266,37 @@ protected:
                                       .colRange(min_x, max_x)
                     );
                     if(score > 0) {
-                        float x=0;
-                        float y=0;
-                        float z=0;
-                        int n=0;
-                        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
-                            out->points[*pit].r = 0;
-                            out->points[*pit].g = 0;
-                            out->points[*pit].b = 255 - 50*i;
-                            x += out->points[*pit].x;
-                            y += out->points[*pit].y;
-                            z += out->points[*pit].z;
-                            n++;
-                        }
+                        pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
+                        feature_extractor.setInputCloud(out);
+                        feature_extractor.setIndices(indices_);
+                        feature_extractor.compute();
 
-                        x /= n;
-                        y /= n;
-                        z /= n;
+                        PointT minPoint, maxPoint, position;
+                        Eigen::Matrix3f rotation;
+                        Eigen::Vector3f mass_center;
+
+                        feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
+                        feature_extractor.getMassCenter(mass_center);
+
 
                         response.found = true;
                         response.pose.header.frame_id = "/shelf";
-                        response.pose.pose.position.x = x;
-                        response.pose.pose.position.y = y;
-                        response.pose.pose.position.z = z;
-                        response.pose.pose.orientation.x = 0.0;
-                        response.pose.pose.orientation.y = 0.0;
-                        response.pose.pose.orientation.z = 0.0;
-                        response.pose.pose.orientation.w = 1.0;
+                        Eigen::Quaternionf quaternion(rotation);
+                        response.pose.pose.position.x = position.x;
+                        response.pose.pose.position.y = position.y;
+                        response.pose.pose.position.z = position.z;
+                        response.pose.pose.orientation.x = quaternion.x();
+                        response.pose.pose.orientation.y = quaternion.y();
+                        response.pose.pose.orientation.z = quaternion.z();
+                        response.pose.pose.orientation.w = quaternion.w();
+                        pose_pub.publish(response.pose);
+                        //response.pose.pose.position.x = x;
+                        //response.pose.pose.position.y = y;
+                        //response.pose.pose.position.z = z;
+                        //response.pose.pose.orientation.x = 0.0;
+                        //response.pose.pose.orientation.y = 0.0;
+                        //response.pose.pose.orientation.z = 0.0;
+                        //response.pose.pose.orientation.w = 1.0;
                     }
                 }
             }
