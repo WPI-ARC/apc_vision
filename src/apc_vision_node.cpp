@@ -59,6 +59,7 @@ const static std::string marker_topic = "/object_segmentation/bounding_boxes";
 
 const static std::string shelf_frame = "/shelf";
 const static std::string camera_frame = "/senz3d_depth_optical_frame";
+const static std::string base_frame = "/base_link";
 
 struct ObjInfo {
     ObjInfo() {}
@@ -135,6 +136,8 @@ protected:
 
         pcl::PCLPointCloud2 uv_pc2, pc_pc2;
 
+        ros::Time stamp = lastPC->header.stamp;
+
         pcl_conversions::toPCL(*lastPC,pc_pc2);
         pcl_conversions::toPCL(*lastUVC,uv_pc2);
 
@@ -148,18 +151,18 @@ protected:
         // --------------------------------
 
         tf::StampedTransform transform;
+        tf::StampedTransform base_transform;
         Eigen::Affine3d affine;
-        ros::Time now = ros::Time::now();
 
         // Wait up to 2 seconds for transform.
-        bool success = listener.waitForTransform(shelf_frame, camera_frame, now, ros::Duration(2.0));
+        bool success = listener.waitForTransform(shelf_frame, camera_frame, stamp, ros::Duration(2.0));
         // If transform isn't found in that time, give up
         if(!success) {
             std::cerr << "Couldn't lookup transform!" << std::endl;
             return true;
         }
         // Otherwise, get the transform
-        listener.lookupTransform(shelf_frame, camera_frame, now, transform);
+        listener.lookupTransform(shelf_frame, camera_frame, stamp, transform);
         // Get an eigen transform from the tf one
         tf::transformTFToEigen(transform, affine);
         // Transform the pointcloud
@@ -174,7 +177,7 @@ protected:
         if(config.bin_limits.find(request.bin) == config.bin_limits.end()) return true;
         std::vector<float>& limits = config.bin_limits[request.bin];
         visualization_msgs::Marker marker;
-        marker.header.frame_id = "/shelf";
+        marker.header.frame_id = shelf_frame;
         marker.type = visualization_msgs::Marker::CUBE;
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.position.x = (limits[0]+limits[1])/2;
@@ -304,7 +307,8 @@ protected:
 
 
                         response.found = true;
-                        response.pose.header.frame_id = "/shelf";
+                        response.pose.header.stamp = stamp;
+                        response.pose.header.frame_id = shelf_frame;
                         Eigen::Quaternionf quaternion(rotation);
                         response.pose.pose.position.x = position.x;
                         response.pose.pose.position.y = position.y;
@@ -313,6 +317,7 @@ protected:
                         response.pose.pose.orientation.y = quaternion.y();
                         response.pose.pose.orientation.z = quaternion.z();
                         response.pose.pose.orientation.w = quaternion.w();
+                        listener.transformPose(base_frame, response.pose, response.pose);
                         pose_pub.publish(response.pose);
                         //response.pose.pose.position.x = x;
                         //response.pose.pose.position.y = y;
