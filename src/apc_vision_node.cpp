@@ -313,10 +313,10 @@ protected:
                         response.pose.pose.position.x = position.x;
                         response.pose.pose.position.y = position.y;
                         response.pose.pose.position.z = position.z;
-                        response.pose.pose.orientation.x = quaternion.x();
-                        response.pose.pose.orientation.y = quaternion.y();
-                        response.pose.pose.orientation.z = quaternion.z();
-                        response.pose.pose.orientation.w = quaternion.w();
+                        response.pose.pose.orientation.x = -0.12384;//quaternion.x();
+                        response.pose.pose.orientation.y = 0.0841883;//quaternion.y();
+                        response.pose.pose.orientation.z = -0.730178;//quaternion.z();
+                        response.pose.pose.orientation.w = 0.666646;//quaternion.w();
                         listener.transformPose(base_frame, response.pose, response.pose);
                         pose_pub.publish(response.pose);
                         //response.pose.pose.position.x = x;

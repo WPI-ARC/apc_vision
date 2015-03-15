@@ -13,7 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
 )
 
-find_package(Boost 1.50 REQUIRED COMPONENTS filesystem)
+find_package(Boost 1.46 REQUIRED COMPONENTS filesystem)
 
 ## Find PCL
 find_package(PCL 1.7 REQUIRED)# common features kdtree search filters segmentation)
@@ -115,6 +115,7 @@ include_directories(
 
 ## Declare a cpp executable
 add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
+add_dependencies(apc_vision_node apc_vision_node_gencpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
