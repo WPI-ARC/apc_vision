@@ -55,7 +55,7 @@ const static std::string uv_topic = "/senz3d/points_uv";
 const static std::string image_topic = "/senz3d/color";
 const static std::string out_topic = "/object_segmentation/points_xyz";
 const static std::string pose_topic = "/object_segmentation/pose";
-//const static std::string marker_topic = "/object_segmentation/bounding_boxes";
+const static std::string marker_topic = "/object_segmentation/bounding_boxes";
 
 const static std::string shelf_frame = "/shelf";
 const static std::string camera_frame = "/senz3d_depth_optical_frame";
@@ -71,7 +71,7 @@ struct Config {
     typedef std::map<std::string, ObjInfo> CalibMap;
     CalibMap calib;
 
-    typedef std::map<std::string, std::vector<int> > BinLimitsMap;
+    typedef std::map<std::string, std::vector<float> > BinLimitsMap;
     BinLimitsMap bin_limits;
 };
 
@@ -85,8 +85,8 @@ public:
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
         pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
         server(nh.advertiseService("object_detect", &Segmenter::service_cb, this)),
-        config(config)
-        //marker_pub(nh.advertise<visualization_msgs::MarkerArray>(marker_topic, 1)),
+        config(config),
+        marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1))
     {
         sync.registerCallback(boost::bind(&Segmenter::process, this, _1, _2));
 
@@ -104,7 +104,7 @@ protected:
 
     ros::Publisher pointcloud_pub;
     ros::Publisher pose_pub;
-    //ros::Publisher marker_pub;
+    ros::Publisher marker_pub;
     ros::ServiceServer server;
 
     tf::TransformListener listener;
@@ -154,7 +154,10 @@ protected:
         // Wait up to 2 seconds for transform.
         bool success = listener.waitForTransform(shelf_frame, camera_frame, now, ros::Duration(2.0));
         // If transform isn't found in that time, give up
-        if(!success) return true;
+        if(!success) {
+            std::cerr << "Couldn't lookup transform!" << std::endl;
+            return true;
+        }
         // Otherwise, get the transform
         listener.lookupTransform(shelf_frame, camera_frame, now, transform);
         // Get an eigen transform from the tf one
@@ -169,7 +172,27 @@ protected:
         pcl::IndicesPtr indices(new std::vector<int>);
 
         if(config.bin_limits.find(request.bin) == config.bin_limits.end()) return true;
-        std::vector<int>& limits = config.bin_limits[request.bin];
+        std::vector<float>& limits = config.bin_limits[request.bin];
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "/shelf";
+        marker.type = visualization_msgs::Marker::CUBE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position.x = (limits[0]+limits[1])/2;
+        marker.pose.position.y = (limits[2]+limits[3])/2;
+        marker.pose.position.z = (limits[4]+limits[5])/2;
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = limits[1]-limits[0];
+        marker.scale.y = limits[3]-limits[2];
+        marker.scale.z = limits[5]-limits[4];
+        marker.color.a = 0.3;
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+
+        marker_pub.publish(marker);
 
         filter.setInputCloud(out);
         filter.setFilterFieldName("x");
@@ -258,6 +281,7 @@ protected:
 
                 if(img_ptr.get()) {
                     if(objDetectors.find(request.object) == objDetectors.end()) {
+                        std::cerr << "Couldn't find detector for specified object!" << std::endl;
                         return true;
                     }
 
@@ -413,7 +437,7 @@ int main(int argc, char** argv) {
 
     for(cv::FileNodeIterator iter = configFile["shelf"].begin(); iter != configFile["shelf"].end(); iter++) {
         std::string key = (*iter).name();
-        std::vector<int> value;
+        std::vector<float> value;
         
         *iter >> value;
 

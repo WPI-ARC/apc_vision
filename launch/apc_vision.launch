@@ -3,13 +3,21 @@
     <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
         <arg name="rgb_resolution" value="WXGA_H"/>
     </include>
+    <!--
     <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
           args="0 0 0.083 -1.55334303 0.0872664626 0 /hand_left_palm /senz3d_depth_optical_frame 100"/>
+    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="0 0 0.083 0.0872664626 3.1415926535 -1.55334303 /hand_left_palm /senz3d_depth_optical_frame 100"/>
     <node name="base_shelf_tf" pkg="tf" type="static_transform_publisher"
           args="0.885315 0.393907 0.817417 0 0 0 /base_link /shelf 100"/>
+    -->
+    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="0.05 0.05 0.10 0.0872664626 3.1415926535 -1.65806279 /hand_left_palm /senz3d_depth_optical_frame 100"/>
+    <node name="base_shelf_tf" pkg="tf" type="static_transform_publisher"
+          args="0.885315 0.393907 0.787417 0 0 0 /base_link /shelf 100"/>
     <!--
     <node name="test_tf" pkg="tf" type="static_transform_publisher"
           args=".47 -.135 .13 0 0 -1.57059632679 /shelf /senz3d_depth_optical_frame 100"/>
-    <node name="vision" pkg="apc_vision" type="apc_vision_node" cwd="node" args="$(arg config)"/>
     -->
+    <node name="vision" pkg="apc_vision" type="apc_vision_node" output="screen" cwd="node" args="$(arg config)"/>
 </launch>
