@@ -142,6 +142,8 @@ protected:
         pcl_conversions::toPCL(*lastUVC,uv_pc2);
 
         PointCloud::Ptr out(new PointCloud);
+        PointCloud::Ptr pubcloud(new PointCloud);
+	pubcloud->header.frame_id=shelf_frame;
         UVCloud::Ptr uvcloud(new UVCloud);
 
         pcl::fromPCLPointCloud2(pc_pc2, *out);
@@ -246,9 +248,9 @@ protected:
         {
             pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
-                out->points[*pit].r = 255 - 50*i;
-                out->points[*pit].g = 50*i;
-                out->points[*pit].b = 0;
+                out->points[*pit].r = 0;
+                out->points[*pit].g = 200-i*50;
+                out->points[*pit].b = i*50;
                 indices_->indices.push_back(*pit);
             }
 
@@ -293,6 +295,12 @@ protected:
                                       .colRange(min_x, max_x)
                     );
                     if(score > 0) {
+			    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
+				//out->points[*pit].r = 255;
+				//out->points[*pit].g = 0;
+				//out->points[*pit].b = 0;
+				pubcloud->points.push_back(out->points[*pit]);
+			    }
                         pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
                         feature_extractor.setInputCloud(out);
                         feature_extractor.setIndices(indices_);
@@ -313,10 +321,10 @@ protected:
                         response.pose.pose.position.x = position.x;
                         response.pose.pose.position.y = position.y;
                         response.pose.pose.position.z = position.z;
-                        response.pose.pose.orientation.x = -0.12384;//quaternion.x();
-                        response.pose.pose.orientation.y = 0.0841883;//quaternion.y();
-                        response.pose.pose.orientation.z = -0.730178;//quaternion.z();
-                        response.pose.pose.orientation.w = 0.666646;//quaternion.w();
+                        response.pose.pose.orientation.x = -.0230206;//quaternion.x();
+                        response.pose.pose.orientation.y = -.0217517;//quaternion.y();
+                        response.pose.pose.orientation.z = -.719197;//quaternion.z();
+                        response.pose.pose.orientation.w = 0.694084;//quaternion.w();
                         listener.transformPose(base_frame, response.pose, response.pose);
                         pose_pub.publish(response.pose);
                         //response.pose.pose.position.x = x;
@@ -326,6 +334,10 @@ protected:
                         //response.pose.pose.orientation.y = 0.0;
                         //response.pose.pose.orientation.z = 0.0;
                         //response.pose.pose.orientation.w = 1.0;
+                    } else {
+			    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
+				pubcloud->points.push_back(out->points[*pit]);
+			    }
                     }
                 }
             }
@@ -394,7 +406,8 @@ protected:
         out->header.frame_id = shelf_frame;
 
         //marker_pub.publish(array_msg);
-        pointcloud_pub.publish(out);
+        //pointcloud_pub.publish(out);
+        pointcloud_pub.publish(pubcloud);
         return true;
     }
 };
