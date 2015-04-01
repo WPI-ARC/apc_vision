@@ -37,7 +37,11 @@
 
 #include <boost/filesystem.hpp>
 
+#include <limits>
+
 #include <iostream>
+
+#include <Eigen/Geometry>
 
 #include "ObjectRecognizer.h"
 #include "apc_vision/ObjectDetect.h"
@@ -170,6 +174,11 @@ protected:
         // Transform the pointcloud
         pcl::transformPointCloud(*out, *out, affine);
 
+	
+	Eigen::Vector3d camera_heading = affine * Eigen::Vector3d(0.0, 0.0, 1.0).homogeneous();
+	Eigen::Vector3d camera_origin = affine * Eigen::Vector3d(0.0, 0.0, 0.0).homogeneous();
+	camera_heading = camera_heading - camera_origin;	
+
         // ------------------------------
         // Filter out bin
         // ------------------------------
@@ -178,6 +187,7 @@ protected:
 
         if(config.bin_limits.find(request.bin) == config.bin_limits.end()) return true;
         std::vector<float>& limits = config.bin_limits[request.bin];
+/*
         visualization_msgs::Marker marker;
         marker.header.frame_id = shelf_frame;
         marker.type = visualization_msgs::Marker::CUBE;
@@ -198,6 +208,7 @@ protected:
         marker.color.b = 0.0;
 
         marker_pub.publish(marker);
+*/
 
         filter.setInputCloud(out);
         filter.setFilterFieldName("x");
@@ -313,20 +324,124 @@ protected:
                         feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
                         feature_extractor.getMassCenter(mass_center);
 
+			float measured_dims[] = {
+				maxPoint.x - minPoint.x,
+				maxPoint.y - minPoint.y,
+				maxPoint.z - minPoint.z
+			};
+
+                        float known_dims[] = {
+                            0.062,
+		            0.16,
+                            0.226	
+                        };
+
+			Eigen::Vector3f x(1.0, 0.0, 0.0);
+			Eigen::Vector3f y(0.0, 1.0, 0.0);
+			Eigen::Vector3f z(0.0, 0.0, 1.0);
+			x = rotation*x;
+			y = rotation*y;
+			z = rotation*z;
+
+			float xdot = std::abs(x.dot(camera_heading.cast<float>()));
+			float ydot = std::abs(y.dot(camera_heading.cast<float>()));
+			float zdot = std::abs(z.dot(camera_heading.cast<float>()));
+
+                        float best_score = 1.0;
+                        Eigen::Matrix3f best_rotation = Eigen::Matrix3f::Identity();
+			Eigen::Vector3f offset(0.0, 0.0, 0.0);
+
+                        for(int i = 0; i < 3; i++) {
+                            for(int j = 0; j < 3; j++) {
+                                if(i == j) continue;
+                                for(int k = 0; k < 3; k++) {
+                                    if(k == i || k == j) continue;
+                                    float score = 0.0; 
+                                    int num = 0;
+                                    if(xdot < 0.93) {
+                                        score += std::abs(measured_dims[0] - known_dims[i]);
+                                        num++;
+                                    }
+                                    if(ydot < 0.93) {
+                                        score += std::abs(measured_dims[1] - known_dims[j]);
+                                        num++;
+                                    }
+                                    if(zdot < 0.93) {
+                                        score += std::abs(measured_dims[2] - known_dims[k]);
+                                        num++;
+                                    }
+                                    score /= num;
+                                    if(score < best_score) {
+                                        best_score = score;
+					best_rotation = Eigen::Matrix3f::Identity();
+                                        if(i == 0 && j == 1 && k == 2) {
+                                        } else if(i == 0 && j == 2 && k == 1) {
+                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
+                                        } else if(i == 1 && j == 0 && k == 2) {
+                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
+                                        } else if(i == 1 && j == 2 && k == 0) {
+                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
+                                        } else if(i == 2 && j == 0 && k == 1) {
+                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
+                                        } else if(i == 2 && j == 1 && k == 0) {
+                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
+                                        }
+
+				        if(xdot >= 0.93) {
+					    float sign = xdot/x.dot(camera_heading.cast<float>());
+					    offset = x*sign*(known_dims[i]/2 - measured_dims[0]/2);
+					}
+				        if(ydot >= 0.93) {
+					    float sign = ydot/y.dot(camera_heading.cast<float>());
+					    offset = y*sign*(known_dims[j]/2 - measured_dims[1]/2);
+					}
+				        if(zdot >= 0.93) {
+					    float sign = zdot/z.dot(camera_heading.cast<float>());
+					    offset = z*sign*(known_dims[k]/2 - measured_dims[2]/2);
+					}
+                                    }
+                                }
+                            }
+                        }
+
+			position.x += offset(0);
+			position.y += offset(1);
+			position.z += offset(2);
 
                         response.found = true;
                         response.pose.header.stamp = stamp;
                         response.pose.header.frame_id = shelf_frame;
-                        Eigen::Quaternionf quaternion(rotation);
+                        Eigen::Quaternionf quaternion(best_rotation*rotation);
                         response.pose.pose.position.x = position.x;
                         response.pose.pose.position.y = position.y;
                         response.pose.pose.position.z = position.z;
-                        response.pose.pose.orientation.x = -.0230206;//quaternion.x();
-                        response.pose.pose.orientation.y = -.0217517;//quaternion.y();
-                        response.pose.pose.orientation.z = -.719197;//quaternion.z();
-                        response.pose.pose.orientation.w = 0.694084;//quaternion.w();
+                        response.pose.pose.orientation.x = quaternion.x();
+                        response.pose.pose.orientation.y = quaternion.y();
+                        response.pose.pose.orientation.z = quaternion.z();
+                        response.pose.pose.orientation.w = quaternion.w();
                         listener.transformPose(base_frame, response.pose, response.pose);
                         pose_pub.publish(response.pose);
+		        visualization_msgs::Marker marker;
+
+		        marker.header.frame_id = shelf_frame;
+		        marker.header.stamp = ros::Time(0);
+		        marker.type = visualization_msgs::Marker::CUBE;
+		        marker.action = visualization_msgs::Marker::ADD;
+		        marker.pose.position.x = position.x;
+		        marker.pose.position.y = position.y;
+		        marker.pose.position.z = position.z;
+		        marker.pose.orientation.x = quaternion.x();
+		        marker.pose.orientation.y = quaternion.y();
+		        marker.pose.orientation.z = quaternion.z();
+		        marker.pose.orientation.w = quaternion.w();
+		        marker.scale.x = known_dims[0];
+		        marker.scale.y = known_dims[1];
+		        marker.scale.z = known_dims[2];
+		        marker.color.r = 0.0;
+		        marker.color.g = 255.0;
+		        marker.color.b = 0.0;
+		        marker.color.a = 0.3;
+                        marker_pub.publish(marker);
                         //response.pose.pose.position.x = x;
                         //response.pose.pose.position.y = y;
                         //response.pose.pose.position.z = z;

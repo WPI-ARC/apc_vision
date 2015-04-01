@@ -7,7 +7,7 @@ objects:
     elmers_washable_no_run_school_glue: ['images/glue.jpg']
     kygen_squeakin_eggs_plush_puppies: []
 shelf:
-    A: [.005, .415, -.260, -.005, .734, .962]
+    A: [.005, .35, -.260, -.005, .734, .962]
     B: [.005, .415, -.563, -.272, .734, .962]
     C: [.005, .415, -.833, -.575, .734, .962]
     D: [.005, .39,   -.260, -.005, .504, .692]
