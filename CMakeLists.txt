@@ -61,7 +61,8 @@ find_package(PCL 1.7 REQUIRED)# common features kdtree search filters segmentati
 ## Generate services in the 'srv' folder
 add_service_files(
     FILES
-    ObjectDetect.srv
+    SampleVision.srv
+    ProcessVision.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -117,6 +118,9 @@ include_directories(
 add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
 add_dependencies(apc_vision_node apc_vision_node_gencpp)
 
+add_executable(three_pose_capture src/three_pose_capture.cpp)
+add_dependencies(three_pose_capture three_pose_capture_gencpp)
+
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(object_recognizer_node object_recognizer_generate_messages_cpp)
@@ -126,6 +130,10 @@ target_link_libraries(apc_vision_node
   ${catkin_LIBRARIES}
   ${Boost_LIBRARIES}
   ${PCL_LIBRARIES}
+)
+
+target_link_libraries(three_pose_capture
+  ${catkin_LIBRARIES}
 )
 
 #############

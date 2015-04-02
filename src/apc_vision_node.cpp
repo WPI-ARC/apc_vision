@@ -40,11 +40,16 @@
 #include <limits>
 
 #include <iostream>
+#include <utility>
+#include <vector>
 
 #include <Eigen/Geometry>
 
 #include "ObjectRecognizer.h"
-#include "apc_vision/ObjectDetect.h"
+#include "apc_vision/ProcessVision.h"
+#include "apc_vision/SampleVision.h"
+
+using namespace apc_vision;
 
 bool close_to(float x, float y, float tolerance_lower, float tolerance_upper) {
     return (x >= y-tolerance_lower) && (x <= y+tolerance_upper);
@@ -67,9 +72,10 @@ const static std::string base_frame = "/base_link";
 
 struct ObjInfo {
     ObjInfo() {}
-    ObjInfo(std::vector<std::string> calibFiles) : calibFiles(calibFiles) {}
+    ObjInfo(std::vector<std::string> calibFiles, std::vector<float> dimensions) : calibFiles(calibFiles), dimensions(dimensions) {}
 
     std::vector<std::string> calibFiles;
+    std::vector<float>       dimensions;
 };
 
 struct Config {
@@ -80,20 +86,21 @@ struct Config {
     BinLimitsMap bin_limits;
 };
 
-class Segmenter {
+class VisionProcessor {
 public:
-    Segmenter(ros::NodeHandle& nh, std::string obj, Config config) :
+    VisionProcessor(ros::NodeHandle& nh, std::string obj, Config config) :
         pointcloud_sub(nh, xyz_topic, 1),
         uv_sub(nh, uv_topic, 1),
-        image_sub(nh.subscribe(image_topic, 1, &Segmenter::image_cb, this)),
+        image_sub(nh.subscribe(image_topic, 1, &VisionProcessor::image_cb, this)),
         sync(pointcloud_sub, uv_sub, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
         pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
-        server(nh.advertiseService("object_detect", &Segmenter::service_cb, this)),
+        sample_server(nh.advertiseService("sample_vision", &VisionProcessor::sample_cb, this)),
+        process_server(nh.advertiseService("process_vision", &VisionProcessor::process_cb, this)),
         config(config),
         marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1))
     {
-        sync.registerCallback(boost::bind(&Segmenter::process, this, _1, _2));
+        sync.registerCallback(boost::bind(&VisionProcessor::process, this, _1, _2));
 
         for(Config::CalibMap::iterator it = config.calib.begin(); it != config.calib.end(); it++) {
             objDetectors[it->first] = ObjectRecognizer(it->second.calibFiles);
@@ -110,7 +117,8 @@ protected:
     ros::Publisher pointcloud_pub;
     ros::Publisher pose_pub;
     ros::Publisher marker_pub;
-    ros::ServiceServer server;
+    ros::ServiceServer sample_server;
+    ros::ServiceServer process_server;
 
     tf::TransformListener listener;
 
@@ -122,6 +130,8 @@ protected:
     sensor_msgs::PointCloud2::ConstPtr lastPC;
     sensor_msgs::PointCloud2::ConstPtr lastUVC;
 
+    std::vector<PointCloud::Ptr> samples;
+
     void image_cb(const sensor_msgs::ImageConstPtr& img) {
         lastImage = img;
     }
@@ -132,107 +142,106 @@ protected:
         lastUVC = uv_msg;
     }
 
-    bool service_cb(apc_vision::ObjectDetect::Request& request, apc_vision::ObjectDetect::Response& response) {
-        response.found = false;
+    bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
+        if(request.command != "reset") {
+            if(!lastPC.get()) return false;
+            if(!lastUVC.get()) return false;
 
-        if(!lastPC.get()) return true;
-        if(!lastUVC.get()) return true;
+            pcl::PCLPointCloud2 uv_pc2, pc_pc2;
 
-        pcl::PCLPointCloud2 uv_pc2, pc_pc2;
+            ros::Time stamp = lastPC->header.stamp;
 
-        ros::Time stamp = lastPC->header.stamp;
+            pcl_conversions::toPCL(*lastPC,pc_pc2);
+            pcl_conversions::toPCL(*lastUVC,uv_pc2);
 
-        pcl_conversions::toPCL(*lastPC,pc_pc2);
-        pcl_conversions::toPCL(*lastUVC,uv_pc2);
+            PointCloud::Ptr out(new PointCloud);
+            PointCloud::Ptr pubcloud(new PointCloud);
+            pubcloud->header.frame_id=shelf_frame;
+            UVCloud::Ptr uvcloud(new UVCloud);
 
-        PointCloud::Ptr out(new PointCloud);
-        PointCloud::Ptr pubcloud(new PointCloud);
-	pubcloud->header.frame_id=shelf_frame;
-        UVCloud::Ptr uvcloud(new UVCloud);
+            pcl::fromPCLPointCloud2(pc_pc2, *out);
+            pcl::fromPCLPointCloud2(uv_pc2, *uvcloud);
 
-        pcl::fromPCLPointCloud2(pc_pc2, *out);
-        pcl::fromPCLPointCloud2(uv_pc2, *uvcloud);
-        // --------------------------------
-        // Transform cloud to shelf-space
-        // --------------------------------
+            // --------------------------------
+            // Transform cloud to shelf-space
+            // --------------------------------
+            tf::StampedTransform transform;
+            tf::StampedTransform base_transform;
+            Eigen::Affine3d affine;
 
-        tf::StampedTransform transform;
-        tf::StampedTransform base_transform;
-        Eigen::Affine3d affine;
+            // Wait up to 2 seconds for transform.
+            bool success = listener.waitForTransform(shelf_frame, camera_frame, stamp, ros::Duration(2.0));
+            // If transform isn't found in that time, give up
+            if(!success) {
+                std::cerr << "Couldn't lookup transform!" << std::endl;
+                return false;
+            }
+            // Otherwise, get the transform
+            listener.lookupTransform(shelf_frame, camera_frame, stamp, transform);
+            // Get an eigen transform from the tf one
+            tf::transformTFToEigen(transform, affine);
+            // Transform the pointcloud
+            pcl::transformPointCloud(*out, *out, affine);
 
-        // Wait up to 2 seconds for transform.
-        bool success = listener.waitForTransform(shelf_frame, camera_frame, stamp, ros::Duration(2.0));
-        // If transform isn't found in that time, give up
-        if(!success) {
-            std::cerr << "Couldn't lookup transform!" << std::endl;
+        
+            /*
+            Eigen::Vector3d camera_heading = affine * Eigen::Vector3d(0.0, 0.0, 1.0).homogeneous();
+            Eigen::Vector3d camera_origin = affine * Eigen::Vector3d(0.0, 0.0, 0.0).homogeneous();
+            camera_heading = camera_heading - camera_origin;	
+            */
+
+            // ------------------------------
+            // Filter out bin
+            // ------------------------------
+            pcl::PassThrough<PointT> filter;
+            pcl::IndicesPtr indices(new std::vector<int>);
+
+            if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
+            std::vector<float>& limits = config.bin_limits[request.command];
+
+            filter.setInputCloud(out);
+            filter.setFilterFieldName("x");
+            filter.setFilterLimits(limits[0], limits[1]);
+            filter.filter(*indices);
+
+            filter.setInputCloud(out);
+            filter.setIndices(indices);
+            filter.setFilterFieldName("y");
+            filter.setFilterLimits(limits[2], limits[3]);
+            filter.filter(*indices);
+
+            filter.setInputCloud(out);
+            filter.setIndices(indices);
+            filter.setFilterFieldName("z");
+            filter.setFilterLimits(limits[4], limits[5]);
+            filter.filter(*indices);
+
+            // ------------------------------------
+            // Filter out statistical outliers
+            // ------------------------------------
+            pcl::StatisticalOutlierRemoval<PointT> sor;
+            sor.setInputCloud (out);
+            sor.setIndices(indices);
+            sor.setMeanK (50);
+            sor.setStddevMulThresh (1.0);
+            //sor.filter (*indices);
+            sor.filter(*out);
+
+            samples.push_back(out);
+
+            return true;
+        } else {
+            samples.clear();
             return true;
         }
-        // Otherwise, get the transform
-        listener.lookupTransform(shelf_frame, camera_frame, stamp, transform);
-        // Get an eigen transform from the tf one
-        tf::transformTFToEigen(transform, affine);
-        // Transform the pointcloud
-        pcl::transformPointCloud(*out, *out, affine);
+    }
 
-	
-	Eigen::Vector3d camera_heading = affine * Eigen::Vector3d(0.0, 0.0, 1.0).homogeneous();
-	Eigen::Vector3d camera_origin = affine * Eigen::Vector3d(0.0, 0.0, 0.0).homogeneous();
-	camera_heading = camera_heading - camera_origin;	
-
-        // ------------------------------
-        // Filter out bin
-        // ------------------------------
-        pcl::PassThrough<PointT> filter;
-        pcl::IndicesPtr indices(new std::vector<int>);
-
-        if(config.bin_limits.find(request.bin) == config.bin_limits.end()) return true;
-        std::vector<float>& limits = config.bin_limits[request.bin];
-/*
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = shelf_frame;
-        marker.type = visualization_msgs::Marker::CUBE;
-        marker.action = visualization_msgs::Marker::ADD;
-        marker.pose.position.x = (limits[0]+limits[1])/2;
-        marker.pose.position.y = (limits[2]+limits[3])/2;
-        marker.pose.position.z = (limits[4]+limits[5])/2;
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = limits[1]-limits[0];
-        marker.scale.y = limits[3]-limits[2];
-        marker.scale.z = limits[5]-limits[4];
-        marker.color.a = 0.3;
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-
-        marker_pub.publish(marker);
-*/
-
-        filter.setInputCloud(out);
-        filter.setFilterFieldName("x");
-        filter.setFilterLimits(limits[0], limits[1]);
-        filter.filter(*indices);
-
-        filter.setInputCloud(out);
-        filter.setIndices(indices);
-        filter.setFilterFieldName("y");
-        filter.setFilterLimits(limits[2], limits[3]);
-        filter.filter(*indices);
-
-        filter.setInputCloud(out);
-        filter.setIndices(indices);
-        filter.setFilterFieldName("z");
-        filter.setFilterLimits(limits[4], limits[5]);
-        filter.filter(*indices);
-
-        pcl::StatisticalOutlierRemoval<PointT> sor;
-        sor.setInputCloud (out);
-        sor.setIndices(indices);
-        sor.setMeanK (50);
-        sor.setStddevMulThresh (1.0);
-        sor.filter (*indices);
+    bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
+        // Combine sampled pointclouds.
+        PointCloud::Ptr out(new PointCloud);
+        for(int i = 0; i < samples.size(); i++) {
+            *out += *samples[i];
+        }
 
         // ------------------------------
         // Cluster extraction
@@ -240,23 +249,31 @@ protected:
 
         // Creating the KdTree object for the search method of the extraction
         pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
-        tree->setInputCloud (out, indices);
+        //tree->setInputCloud (out, indices);
+        tree->setInputCloud (out);
 
         std::vector<pcl::PointIndices> cluster_indices;
         pcl::EuclideanClusterExtraction<PointT> ec;
         ec.setClusterTolerance (0.01); // 1cm
         ec.setMinClusterSize (100);
-        ec.setMaxClusterSize (25000);
+        //ec.setMaxClusterSize (250000);
         ec.setSearchMethod (tree);
         ec.setInputCloud (out);
-        ec.setIndices(indices);
+        //ec.setIndices(indices);
         ec.extract (cluster_indices);
 
         //visualization_msgs::MarkerArray array_msg;
+        
+        Eigen::Matrix3f best_rotation;
+        PointT best_position;
+        float best_score = 1.0;
+
+        std::cout << "Num Clusters: " << cluster_indices.size() << std::endl;
 
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
         {
+            std::cout << "Processing Cluster #"<<i<<std::endl;
             pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
                 out->points[*pit].r = 0;
@@ -265,6 +282,34 @@ protected:
                 indices_->indices.push_back(*pit);
             }
 
+            pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
+            feature_extractor.setInputCloud(out);
+            feature_extractor.setIndices(indices_);
+            feature_extractor.compute();
+
+            PointT minPoint, maxPoint, position;
+            Eigen::Matrix3f rotation;
+            Eigen::Vector3f mass_center;
+
+            feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
+            feature_extractor.getMassCenter(mass_center);
+
+            std::vector<float> dims;
+            dims.push_back(maxPoint.x - minPoint.x);
+            dims.push_back(maxPoint.y - minPoint.y);
+            dims.push_back(maxPoint.z - minPoint.z);
+
+            std::string object = request.object;
+
+            float score = detectCuboidPose(object, position, rotation, dims);
+
+            if(score < best_score) {
+                best_score = score;
+                best_rotation = rotation;
+                best_position = position;
+            }
+
+            /*
             float min_u = 1.0;
             float min_v = 1.0;
             float max_u = 0.0;
@@ -298,7 +343,7 @@ protected:
                 if(img_ptr.get()) {
                     if(objDetectors.find(request.object) == objDetectors.end()) {
                         std::cerr << "Couldn't find detector for specified object!" << std::endl;
-                        return true;
+                        return false;
                     }
 
                     float score = objDetectors[request.object].detect(
@@ -306,12 +351,12 @@ protected:
                                       .colRange(min_x, max_x)
                     );
                     if(score > 0) {
-			    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
-				//out->points[*pit].r = 255;
-				//out->points[*pit].g = 0;
-				//out->points[*pit].b = 0;
-				pubcloud->points.push_back(out->points[*pit]);
-			    }
+                        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
+                            //out->points[*pit].r = 255;
+                            //out->points[*pit].g = 0;
+                            //out->points[*pit].b = 0;
+                            pubcloud->points.push_back(out->points[*pit]);
+                        }
                         pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
                         feature_extractor.setInputCloud(out);
                         feature_extractor.setIndices(indices_);
@@ -324,89 +369,21 @@ protected:
                         feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
                         feature_extractor.getMassCenter(mass_center);
 
-			float measured_dims[] = {
-				maxPoint.x - minPoint.x,
-				maxPoint.y - minPoint.y,
-				maxPoint.z - minPoint.z
-			};
+                        float measured_dims[] = {
+                            maxPoint.x - minPoint.x,
+                            maxPoint.y - minPoint.y,
+                            maxPoint.z - minPoint.z
+                        };
 
                         float known_dims[] = {
                             0.062,
-		            0.16,
+                            0.16,
                             0.226	
                         };
 
-			Eigen::Vector3f x(1.0, 0.0, 0.0);
-			Eigen::Vector3f y(0.0, 1.0, 0.0);
-			Eigen::Vector3f z(0.0, 0.0, 1.0);
-			x = rotation*x;
-			y = rotation*y;
-			z = rotation*z;
-
-			float xdot = std::abs(x.dot(camera_heading.cast<float>()));
-			float ydot = std::abs(y.dot(camera_heading.cast<float>()));
-			float zdot = std::abs(z.dot(camera_heading.cast<float>()));
-
-                        float best_score = 1.0;
-                        Eigen::Matrix3f best_rotation = Eigen::Matrix3f::Identity();
-			Eigen::Vector3f offset(0.0, 0.0, 0.0);
-
-                        for(int i = 0; i < 3; i++) {
-                            for(int j = 0; j < 3; j++) {
-                                if(i == j) continue;
-                                for(int k = 0; k < 3; k++) {
-                                    if(k == i || k == j) continue;
-                                    float score = 0.0; 
-                                    int num = 0;
-                                    if(xdot < 0.93) {
-                                        score += std::abs(measured_dims[0] - known_dims[i]);
-                                        num++;
-                                    }
-                                    if(ydot < 0.93) {
-                                        score += std::abs(measured_dims[1] - known_dims[j]);
-                                        num++;
-                                    }
-                                    if(zdot < 0.93) {
-                                        score += std::abs(measured_dims[2] - known_dims[k]);
-                                        num++;
-                                    }
-                                    score /= num;
-                                    if(score < best_score) {
-                                        best_score = score;
-					best_rotation = Eigen::Matrix3f::Identity();
-                                        if(i == 0 && j == 1 && k == 2) {
-                                        } else if(i == 0 && j == 2 && k == 1) {
-                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
-                                        } else if(i == 1 && j == 0 && k == 2) {
-                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
-                                        } else if(i == 1 && j == 2 && k == 0) {
-                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
-                                        } else if(i == 2 && j == 0 && k == 1) {
-                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
-                                        } else if(i == 2 && j == 1 && k == 0) {
-                                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
-                                        }
-
-				        if(xdot >= 0.93) {
-					    float sign = xdot/x.dot(camera_heading.cast<float>());
-					    offset = x*sign*(known_dims[i]/2 - measured_dims[0]/2);
-					}
-				        if(ydot >= 0.93) {
-					    float sign = ydot/y.dot(camera_heading.cast<float>());
-					    offset = y*sign*(known_dims[j]/2 - measured_dims[1]/2);
-					}
-				        if(zdot >= 0.93) {
-					    float sign = zdot/z.dot(camera_heading.cast<float>());
-					    offset = z*sign*(known_dims[k]/2 - measured_dims[2]/2);
-					}
-                                    }
-                                }
-                            }
-                        }
-
-			position.x += offset(0);
-			position.y += offset(1);
-			position.z += offset(2);
+                        position.x += offset(0);
+                        position.y += offset(1);
+                        position.z += offset(2);
 
                         response.found = true;
                         response.pose.header.stamp = stamp;
@@ -421,26 +398,26 @@ protected:
                         response.pose.pose.orientation.w = quaternion.w();
                         listener.transformPose(base_frame, response.pose, response.pose);
                         pose_pub.publish(response.pose);
-		        visualization_msgs::Marker marker;
+                        visualization_msgs::Marker marker;
 
-		        marker.header.frame_id = shelf_frame;
-		        marker.header.stamp = ros::Time(0);
-		        marker.type = visualization_msgs::Marker::CUBE;
-		        marker.action = visualization_msgs::Marker::ADD;
-		        marker.pose.position.x = position.x;
-		        marker.pose.position.y = position.y;
-		        marker.pose.position.z = position.z;
-		        marker.pose.orientation.x = quaternion.x();
-		        marker.pose.orientation.y = quaternion.y();
-		        marker.pose.orientation.z = quaternion.z();
-		        marker.pose.orientation.w = quaternion.w();
-		        marker.scale.x = known_dims[0];
-		        marker.scale.y = known_dims[1];
-		        marker.scale.z = known_dims[2];
-		        marker.color.r = 0.0;
-		        marker.color.g = 255.0;
-		        marker.color.b = 0.0;
-		        marker.color.a = 0.3;
+                        marker.header.frame_id = shelf_frame;
+                        marker.header.stamp = ros::Time(0);
+                        marker.type = visualization_msgs::Marker::CUBE;
+                        marker.action = visualization_msgs::Marker::ADD;
+                        marker.pose.position.x = position.x;
+                        marker.pose.position.y = position.y;
+                        marker.pose.position.z = position.z;
+                        marker.pose.orientation.x = quaternion.x();
+                        marker.pose.orientation.y = quaternion.y();
+                        marker.pose.orientation.z = quaternion.z();
+                        marker.pose.orientation.w = quaternion.w();
+                        marker.scale.x = known_dims[0];
+                        marker.scale.y = known_dims[1];
+                        marker.scale.z = known_dims[2];
+                        marker.color.r = 0.0;
+                        marker.color.g = 255.0;
+                        marker.color.b = 0.0;
+                        marker.color.a = 0.3;
                         marker_pub.publish(marker);
                         //response.pose.pose.position.x = x;
                         //response.pose.pose.position.y = y;
@@ -450,12 +427,13 @@ protected:
                         //response.pose.pose.orientation.z = 0.0;
                         //response.pose.pose.orientation.w = 1.0;
                     } else {
-			    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
-				pubcloud->points.push_back(out->points[*pit]);
-			    }
+                        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
+                            pubcloud->points.push_back(out->points[*pit]);
+                        }
                     }
                 }
             }
+            */
 
             /*
             Eigen::Quaternionf quaternion(rotation);
@@ -489,7 +467,6 @@ protected:
 
             /*
             pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-            pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
             // Create the segmentation object
             pcl::SACSegmentation<PointT> seg;
             // Optional
@@ -518,13 +495,173 @@ protected:
             i++;
         }
 
+        if(config.calib.find(request.object) == config.calib.end()) return false;
+        if(config.calib[request.object].dimensions.size() == 0) return false;
+
+        std::vector<float> dims = config.calib[request.object].dimensions;
+
+        if(best_score < 1.0) {
+            ros::Time stamp = lastPC->header.stamp;
+            response.pose.header.stamp = stamp;
+            response.pose.header.frame_id = shelf_frame;
+            Eigen::Quaternionf quaternion(best_rotation);
+            response.pose.pose.position.x = best_position.x;
+            response.pose.pose.position.y = best_position.y;
+            response.pose.pose.position.z = best_position.z;
+            response.pose.pose.orientation.x = quaternion.x();
+            response.pose.pose.orientation.y = quaternion.y();
+            response.pose.pose.orientation.z = quaternion.z();
+            response.pose.pose.orientation.w = quaternion.w();
+            listener.transformPose(base_frame, response.pose, response.pose);
+            pose_pub.publish(response.pose);
+            visualization_msgs::Marker marker;
+
+            marker.header.frame_id = shelf_frame;
+            marker.header.stamp = ros::Time(0);
+            marker.type = visualization_msgs::Marker::CUBE;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.pose.position.x = best_position.x;
+            marker.pose.position.y = best_position.y;
+            marker.pose.position.z = best_position.z;
+            marker.pose.orientation.x = quaternion.x();
+            marker.pose.orientation.y = quaternion.y();
+            marker.pose.orientation.z = quaternion.z();
+            marker.pose.orientation.w = quaternion.w();
+            marker.scale.x = dims[0];
+            marker.scale.y = dims[1];
+            marker.scale.z = dims[2];
+            marker.color.r = 40.0;
+            marker.color.g = 230.0;
+            marker.color.b = 40.0;
+            marker.color.a = 0.7;
+            marker_pub.publish(marker);
+        }
+
         out->header.frame_id = shelf_frame;
 
         //marker_pub.publish(array_msg);
-        //pointcloud_pub.publish(out);
-        pointcloud_pub.publish(pubcloud);
+        pointcloud_pub.publish(out);
+        samples.clear();
+        //pointcloud_pub.publish(pubcloud);
         return true;
     }
+
+    float detectCuboidPose(
+        // Object name
+        std::string object,
+        // Position and orientation from OBB
+        PointT position, 
+        Eigen::Matrix3f& rotation,
+        // OBB size
+        std::vector<float>& sensed_dims
+        // Direction camera is pointing
+        //Eigen::Vector3f camera_vector
+    ) {
+        Eigen::Vector3f x(1.0, 0.0, 0.0);
+        Eigen::Vector3f y(0.0, 1.0, 0.0);
+        Eigen::Vector3f z(0.0, 0.0, 1.0);
+        x = rotation*x;
+        y = rotation*y;
+        z = rotation*z;
+
+        //float xdot = std::abs(x.dot(camera_vector.cast<float>()));
+        //float ydot = std::abs(y.dot(camera_vector.cast<float>()));
+        //float zdot = std::abs(z.dot(camera_vector.cast<float>()));
+
+        float best_score = 1.0;
+        Eigen::Matrix3f best_rotation = Eigen::Matrix3f::Identity();
+        Eigen::Vector3f offset(0.0, 0.0, 0.0);
+
+        //float dot_threshold = 0.93;
+        
+        if(config.calib.find(object) == config.calib.end()) return false;
+        if(config.calib[object].dimensions.size() == 0) return false;
+
+        std::vector<float>& known_dims = config.calib[object].dimensions;
+        std::vector<float> new_dims = known_dims;
+
+        for(int i = 0; i < 3; i++) {
+            for(int j = 0; j < 3; j++) {
+                if(i == j) continue;
+                for(int k = 0; k < 3; k++) {
+                    if(k == i || k == j) continue;
+                    float score = 0.0; 
+                    score += std::abs(sensed_dims[0] - known_dims[i]);
+                    score += std::abs(sensed_dims[1] - known_dims[j]);
+                    score += std::abs(sensed_dims[2] - known_dims[k]);
+                    /*
+                    int num = 0;
+                    if(xdot < dot_threshold) {
+                        score += std::abs(sensed_dims[0] - known_dims[i]);
+                        num++;
+                    }
+                    if(ydot < dot_threshold) {
+                        score += std::abs(sensed_dims[1] - known_dims[j]);
+                        num++;
+                    }
+                    if(zdot < dot_threshold) {
+                        score += std::abs(sensed_dims[2] - known_dims[k]);
+                        num++;
+                    }
+                    score /= num;
+                    */
+                    if(score < best_score) {
+                        best_score = score;
+                        best_rotation = Eigen::Matrix3f::Identity();
+                    }
+                    if(i == 0 && j == 1 && k == 2) {
+                        new_dims = known_dims;
+                    } else if(i == 0 && j == 2 && k == 1) {
+                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
+                        new_dims[0] = known_dims[0];
+                        new_dims[1] = known_dims[2];
+                        new_dims[2] = known_dims[1];
+                    } else if(i == 1 && j == 0 && k == 2) {
+                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
+                        new_dims[0] = known_dims[1];
+                        new_dims[1] = known_dims[0];
+                        new_dims[2] = known_dims[2];
+                    } else if(i == 1 && j == 2 && k == 0) {
+                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
+                        new_dims[1] = known_dims[0];
+                        new_dims[2] = known_dims[1];
+                        new_dims[0] = known_dims[2];
+                    } else if(i == 2 && j == 0 && k == 1) {
+                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
+                        new_dims[2] = known_dims[0];
+                        new_dims[0] = known_dims[1];
+                        new_dims[1] = known_dims[2];
+                    } else if(i == 2 && j == 1 && k == 0) {
+                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
+                        new_dims[0] = known_dims[2];
+                        new_dims[1] = known_dims[1];
+                        new_dims[2] = known_dims[0];
+                    }
+
+                    /*
+                    if(xdot >= dot_threshold) {
+                        float sign = xdot/x.dot(camera_heading.cast<float>());
+                        offset = x*sign*(known_dims[i]/2 - measured_dims[0]/2);
+                    }
+                    if(ydot >= dot_threshold) {
+                        float sign = ydot/y.dot(camera_heading.cast<float>());
+                        offset = y*sign*(known_dims[j]/2 - measured_dims[1]/2);
+                    }
+                    if(zdot >= dot_threshold) {
+                        float sign = zdot/z.dot(camera_heading.cast<float>());
+                        offset = z*sign*(known_dims[k]/2 - measured_dims[2]/2);
+                    }
+                    */
+                }
+            }
+        }
+
+        sensed_dims = known_dims;//new_dims;
+        rotation = best_rotation * rotation;
+        //position += offset;
+        return best_score;
+    }
+
 };
 
 int main(int argc, char** argv) {
@@ -552,20 +689,22 @@ int main(int argc, char** argv) {
 
     for(cv::FileNodeIterator iter = configFile["objects"].begin(); iter != configFile["objects"].end(); iter++) {
         std::string key = (*iter).name();
-        std::vector<std::string> value;
+        std::vector<std::string> files;
 
-        *iter >> value;
+        (*iter)["files"] >> files;
 
-        for(int i = 0; i < value.size(); i++) {
-            boost::filesystem::path image_path(value[i]);
+        for(int i = 0; i < files.size(); i++) {
+            boost::filesystem::path image_path(files[i]);
             // If the path to an image isn't absolute, assume it's
             // relative to where the config file is
             if(!image_path.is_absolute()) 
-                value[i] = (config_path.parent_path() / value[i]).string();
+                files[i] = (config_path.parent_path() / files[i]).string();
         }
 
+        std::vector<float> dimensions;
+        (*iter)["size"] >> dimensions;
 
-        config.calib[key] = ObjInfo(value);
+        config.calib[key] = ObjInfo(files, dimensions);
     }
 
     for(cv::FileNodeIterator iter = configFile["shelf"].begin(); iter != configFile["shelf"].end(); iter++) {
@@ -577,7 +716,7 @@ int main(int argc, char** argv) {
         config.bin_limits[key] = value;
     }
 
-    Segmenter segmenter(nh, obj, config);
+    VisionProcessor processor(nh, obj, config);
 
     ros::spin();
 }

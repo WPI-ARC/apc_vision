@@ -1,11 +1,23 @@
 %YAML:1.2
 objects:
-    cheezit_big_original: ['images/cheezit.jpg']
-    genuine_joe_plastic_stir_sticks: ['images/stirsticks.jpg']
-    crayola_64_ct: []
-    expo_dry_erase_board_eraser: ['images/expo.jpg']
-    elmers_washable_no_run_school_glue: ['images/glue.jpg']
-    kygen_squeakin_eggs_plush_puppies: []
+    cheezit_big_original: 
+        files: ['images/cheezit.jpg']
+        size: [0.062, 0.16, 0.226]
+    genuine_joe_plastic_stir_sticks:
+        files: ['images/stirsticks.jpg']
+        size: [0.0, 0.0, 0.0]
+    crayola_64_ct:
+        files: []
+        size: [0.0, 0.0, 0.0]
+    expo_dry_erase_board_eraser:
+        files: ['images/expo.jpg']
+        size: [0.0, 0.0, 0.0]
+    elmers_washable_no_run_school_glue:
+        files: ['images/glue.jpg']
+        size: [0.0, 0.0, 0.0]
+    kygen_squeakin_eggs_plush_puppies:
+        files: []
+        size: [0.0, 0.0, 0.0]
 shelf:
     A: [.005, .35, -.260, -.005, .734, .962]
     B: [.005, .415, -.563, -.272, .734, .962]
