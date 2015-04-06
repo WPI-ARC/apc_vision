@@ -5,17 +5,77 @@ objects:
         size: [0.062, 0.16, 0.226]
     genuine_joe_plastic_stir_sticks:
         files: ['images/stirsticks.jpg']
-        size: [0.0, 0.0, 0.0]
+        size: [0.095, 0.107, 0.145]
     crayola_64_ct:
         files: []
-        size: [0.0, 0.0, 0.0]
+        size: [0.037, 0.125, 0.145]
     expo_dry_erase_board_eraser:
         files: ['images/expo.jpg']
-        size: [0.0, 0.0, 0.0]
+        size: [0.035, 0.055, 0.13]
     elmers_washable_no_run_school_glue:
         files: ['images/glue.jpg']
         size: [0.0, 0.0, 0.0]
     kygen_squeakin_eggs_plush_puppies:
+        files: []
+        size: [0.06, 0.121, 0.18]
+    oreo_mega_stuf:
+        files: []
+        size: [0.06, 0.155, 0.2]
+    champion_copper_plus_spark_plug:
+        files: []
+        size: [0.02, 0.025, 0.095]
+    munchkin_white_hot_duck_bath_toy:
+        files: []
+        size: [0.065, 0.095, 0.13]
+    mommys_helper_outlet_plugs:
+        files: []
+        size: [0.055, 0.09, 0.19]
+    sharpie_accent_tank_style_highlighters:
+        files: []
+        size: [0.023, 0.116, 0.125]
+    stanley_66_052:
+        files: []
+        size: [0.02, 0.1, 0.195]
+    safety_works_safety_glasses:
+        files: []
+        size: [0.05, 0.07, 0.2]
+    paper_mate_12_count_mirado_black_warrior:
+        files: []
+        size: [0.016, 0.05, 0.195]
+    mark_twain:
+        files: []
+        size: [0.12, 0.132, 0.21]
+    straw_cup:
+        files: []
+        size: [0.08, 0.09, 0.17]
+    greenies_dental_treats:
+        files: []
+        size: [0.04, 0.175, 0.21]
+    joke_book:
+        files: []
+        size: [0.01, 0.108, 0.177]
+    kong_air_dog:
+        files: []
+        size: [0.07, 0.108, 0.19]
+    highland_post_notes:
+        files: []
+        size: [0.05, 0.04, 0.115]
+    glue:
+        files: []
+        size: [0.025, 0.06, 0.145]
+    kong_sitting_frog:
+        files: []
+        size: [0.045, 0.09, 0.21]
+    kong_duck_dog_toy:
+        files: []
+        size: [0.05, 0.09, 0.18]
+    pencil_cup:
+        files: []
+        size: [0.107, 0.14, 0.107]
+    index_cards:
+        files: []
+        size: [0.02, 0.076, 0.127]
+    test_object:
         files: []
         size: [0.0, 0.0, 0.0]
 shelf:
