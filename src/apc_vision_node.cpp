@@ -67,6 +67,7 @@ const static std::string image_topic = "/senz3d/color";
 const static std::string out_topic = "/object_segmentation/points_xyz";
 const static std::string pose_topic = "/object_segmentation/pose";
 const static std::string marker_topic = "/object_segmentation/bounding_boxes";
+const static std::string limits_topic = "/object_segmentation/bin_limits";
 
 const static std::string shelf_frame = "/shelf";
 const static std::string camera_frame = "/senz3d_depth_optical_frame";
@@ -100,7 +101,8 @@ public:
         sample_server(nh.advertiseService("sample_vision", &VisionProcessor::sample_cb, this)),
         process_server(nh.advertiseService("process_vision", &VisionProcessor::process_cb, this)),
         config(config),
-        marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1))
+        marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1)),
+        limits_pub(nh.advertise<visualization_msgs::Marker>(limits_topic, 1))
     {
         sync.registerCallback(boost::bind(&VisionProcessor::process, this, _1, _2));
 
@@ -119,6 +121,7 @@ protected:
     ros::Publisher pointcloud_pub;
     ros::Publisher pose_pub;
     ros::Publisher marker_pub;
+    ros::Publisher limits_pub;
     ros::ServiceServer sample_server;
     ros::ServiceServer process_server;
 

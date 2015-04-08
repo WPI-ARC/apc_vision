@@ -29,36 +29,36 @@ int main(int argc, char** argv) {
     std::cout << "-------DONE SLEEPING----" << std::endl;
 
     geometry_msgs::Pose pose1;
-    pose1.position.x = 0.5083;
+    pose1.position.x = 0.5083-0.1;
     pose1.position.y = 0.15821;
-    pose1.position.z = 1.61;
+    pose1.position.z = 1.61+0.08;
     pose1.orientation.x = 0.52684;
     pose1.orientation.y = -0.34443;
     pose1.orientation.z = -0.54901;
     pose1.orientation.w = 0.5499;
     
     geometry_msgs::Pose pose2;
-    pose2.position.x = 0.52377;
+    pose2.position.x = 0.52377-0.1;
     pose2.position.y = 0.32783;
-    pose2.position.z = 1.7247;
+    pose2.position.z = 1.7247+0.08;
     pose2.orientation.x = 0.36779;
     pose2.orientation.y = -0.34908;
     pose2.orientation.z = -0.6687;
     pose2.orientation.w =  0.54379;
 
     geometry_msgs::Pose pose3;
-    pose3.position.x = 0.50602;
+    pose3.position.x = 0.50602-0.1;
     pose3.position.y = 0.29665;
-    pose3.position.z = 1.6084;
+    pose3.position.z = 1.6084+0.08;
     pose3.orientation.x = -0.4916;
     pose3.orientation.y = 0.39284;
     pose3.orientation.z = 0.59876;
     pose3.orientation.w = -0.49547;
 
     geometry_msgs::Pose pose4;
-    pose4.position.x = 0.51712;
+    pose4.position.x = 0.51712-0.1;
     pose4.position.y = 0.4292;
-    pose4.position.z = 1.6063;
+    pose4.position.z = 1.6063+0.08;
     pose4.orientation.x = -0.40749;
     pose4.orientation.y = 0.475429;
     pose4.orientation.z = 0.680853;
