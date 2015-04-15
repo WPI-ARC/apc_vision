@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(Boost 1.46 REQUIRED COMPONENTS filesystem)
 
 ## Find PCL
-find_package(PCL 1.7 REQUIRED)# common features kdtree search filters segmentation)
+find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
