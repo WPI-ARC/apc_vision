@@ -1,6 +1,7 @@
 <launch>
     <arg name="config" value="$(find apc_vision)/config.yaml"/>
     <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
+        <arg name="confidence_threshold" value="100"/>
         <arg name="rgb_resolution" value="WXGA_H"/>
     </include>
     <!--
@@ -20,18 +21,44 @@
     <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
           args="0.01 0.0 0.08 0.03491 3.22886 -1.74533 /hand_left_palm /senz3d_depth_optical_frame 100"/>
     -->
+    <!--
     <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
           args="-0.013 0.155 0.0 0.0 0.0 -1.57079632679 /hand_left_palm /senz3d_depth_optical_frame 100"/>
+    -->
 
     <!--
+    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="0.0 0.01 0.08 0.034906585 3.19395253 -1.6406095 /hand_left_palm /senz3d_depth_optical_frame 100"/>
+    -->
+
+<!--
+    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="-0.0141 0.07435 -0.130 0.261799388 3.40339204 -0.122173048 /arm_left_link_7_t /senz3d_depth_optical_frame 100"/>
+    
+-->
+    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="-0.0141 0.07435 -0.130 0.244346095 3.24631241 -0.0959931089  /arm_left_link_7_t /senz3d_depth_optical_frame 100"/>
+    <!--
+    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="-0.0141 0.07435 -0.130 0.20943951 3.21140582 -0.0698131701 /arm_left_link_7_t /senz3d_depth_optical_frame 100"/>
+    
+-->
+    <!--    
     <node name="base_shelf_tf" pkg="tf" type="static_transform_publisher"
           args="0.885315 0.403907 0.787417 0 0 0 /base_link /shelf 100"/>
     -->
+
+    <!--
     <node name="base_shelf_tf" pkg="tf" type="static_transform_publisher"
           args="0.885315 0.413907 0.787417 0 0 0 /base_link /shelf 100"/>
+    -->
+    <node name="base_shelf_tf" pkg="tf" type="static_transform_publisher"
+          args="0.9 0.413907 0.787417 0 0 0 /base_link /shelf 100"/>
+    
     <!--
     <node name="test_tf" pkg="tf" type="static_transform_publisher"
           args=".47 -.135 .13 0 0 -1.57059632679 /shelf /senz3d_depth_optical_frame 100"/>
+.005, .35, -.240, -.025, .724, .962
     -->
     <node name="vision" pkg="apc_vision" type="apc_vision_node" output="screen" cwd="node" args="$(arg config)"/>
 </launch>

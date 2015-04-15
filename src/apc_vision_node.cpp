@@ -42,6 +42,8 @@
 #include <iostream>
 #include <utility>
 #include <vector>
+#include <algorithm>    // std::sort
+#include <list>
 
 #include <Eigen/Geometry>
 
@@ -88,7 +90,16 @@ struct Config {
     typedef std::map<std::string, std::vector<float> > BinLimitsMap;
     BinLimitsMap bin_limits;
 };
-
+struct BestCluster{
+	Eigen::Matrix3f rotation;
+	PointT position;
+	float score;
+	PointCloud::Ptr out;
+};
+bool bestScoreComparison(const BestCluster &a, const BestCluster &b)
+{
+	return a.score<b.score;
+}
 class VisionProcessor {
 public:
     VisionProcessor(ros::NodeHandle& nh, std::string obj, Config config) :
@@ -199,7 +210,7 @@ protected:
             // Filter out bin
             // ------------------------------
             pcl::PassThrough<PointT> filter;
-            pcl::IndicesPtr indices(new std::vector<int>);
+            //pcl::IndicesPtr indices(new std::vector<int>);
 
             if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
             std::vector<float>& limits = config.bin_limits[request.command];
@@ -207,26 +218,29 @@ protected:
             filter.setInputCloud(out);
             filter.setFilterFieldName("x");
             filter.setFilterLimits(limits[0], limits[1]);
-            filter.filter(*indices);
+            //filter.filter(*indices);
+            filter.filter(*out);
 
             filter.setInputCloud(out);
-            filter.setIndices(indices);
+            //filter.setIndices(indices);
             filter.setFilterFieldName("y");
             filter.setFilterLimits(limits[2], limits[3]);
-            filter.filter(*indices);
+            //filter.filter(*indices);
+            filter.filter(*out);
 
             filter.setInputCloud(out);
-            filter.setIndices(indices);
+            //filter.setIndices(indices);
             filter.setFilterFieldName("z");
             filter.setFilterLimits(limits[4], limits[5]);
-            filter.filter(*indices);
+            //filter.filter(*indices);
+            filter.filter(*out);
 
             // ------------------------------------
             // Filter out statistical outliers
             // ------------------------------------
             pcl::StatisticalOutlierRemoval<PointT> sor;
             sor.setInputCloud (out);
-            sor.setIndices(indices);
+            //sor.setIndices(indices);
             sor.setMeanK (50);
             sor.setStddevMulThresh (1.0);
             //sor.filter (*indices);
@@ -240,15 +254,84 @@ protected:
             return true;
         }
     }
-
+	bool showMarkers(std::list<BestCluster>::iterator result, std::vector<float> dims)
+	{
+		Eigen::Quaternionf quaternion(result->rotation);
+		visualization_msgs::Marker marker;
+		marker.header.frame_id = shelf_frame;
+		marker.header.stamp = ros::Time(0);
+		marker.type = visualization_msgs::Marker::CUBE;
+		marker.action = visualization_msgs::Marker::ADD;
+		marker.pose.position.x = result->position.x;
+		marker.pose.position.y = result->position.y;
+		marker.pose.position.z = result->position.z;
+		marker.pose.orientation.x = quaternion.x();
+		marker.pose.orientation.y = quaternion.y();
+		marker.pose.orientation.z = quaternion.z();
+		marker.pose.orientation.w = quaternion.w();
+		marker.scale.x = dims[0];
+		marker.scale.y = dims[1];
+		marker.scale.z = dims[2];
+		marker.color.r = 40.0;
+		marker.color.g = 230.0;
+		marker.color.b = 40.0;
+		marker.color.a = 0.7;
+		marker_pub.publish(marker);
+	}
     bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
+        
+		std::string object = request.object;
+		std::vector<float> dims = config.calib[request.object].dimensions;        
+
         // Combine sampled pointclouds.
         PointCloud::Ptr out(new PointCloud);
-        for(int i = 0; i < samples.size(); i++) {
+        std::list<BestCluster> bestCluster;
+        std::list<BestCluster>::iterator it=bestCluster.begin();
+        for(int i = 0 ; i < samples.size(); i++, it++) {
+			bestCluster.push_back(extractClusters(samples[i], object));
+			showMarkers(it, dims);
+			pointcloud_pub.publish(samples[i]);
             *out += *samples[i];
+            ros::Duration(2).sleep(); 
         }
+        bestCluster.push_back(extractClusters(out, object));
+        
+        if(config.calib.find(request.object) == config.calib.end()) return false;
+        if(config.calib[request.object].dimensions.size() == 0) return false;
 
-        // ------------------------------
+        // Get bestCluster
+        std::list<BestCluster>::iterator result = std::min_element(bestCluster.begin(), bestCluster.end(), bestScoreComparison);
+        if(bestCluster.end()==result)
+        {
+			return false;
+		}
+		else
+		{
+			ros::Time stamp = lastPC->header.stamp;
+			response.pose.header.stamp = stamp;
+			response.pose.header.frame_id = shelf_frame;
+			Eigen::Quaternionf quaternion(result->rotation);
+			response.pose.pose.position.x = result->position.x;
+			response.pose.pose.position.y = result->position.y;
+			response.pose.pose.position.z = result->position.z;
+			response.pose.pose.orientation.x = quaternion.x();
+			response.pose.pose.orientation.y = quaternion.y();
+			response.pose.pose.orientation.z = quaternion.z();
+			response.pose.pose.orientation.w = quaternion.w();
+			listener.transformPose(base_frame, response.pose, response.pose);
+			pose_pub.publish(response.pose);
+            showMarkers(result,dims);
+        }
+        pointcloud_pub.publish(out);
+		
+        samples.clear();
+        //pointcloud_pub.publish(pubcloud);
+        return true;
+    }
+    
+	BestCluster extractClusters(PointCloud::Ptr out, std::string object)
+	{
+		// ------------------------------
         // Cluster extraction
         // ------------------------------
 
@@ -269,16 +352,12 @@ protected:
 
         //visualization_msgs::MarkerArray array_msg;
         
-        Eigen::Matrix3f best_rotation;
-        PointT best_position;
+        BestCluster bestCluster;
         float best_score = 1.0;
-
-        std::cout << "Num Clusters: " << cluster_indices.size() << std::endl;
 
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
         {
-            std::cout << "Processing Cluster #"<<i<<std::endl;
             pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
                 out->points[*pit].r = 0;
@@ -304,14 +383,15 @@ protected:
             dims.push_back(maxPoint.y - minPoint.y);
             dims.push_back(maxPoint.z - minPoint.z);
 
-            std::string object = request.object;
 
             float score = detectCuboidPose(object, position, rotation, dims);
 
             if(score < best_score) {
                 best_score = score;
-                best_rotation = rotation;
-                best_position = position;
+                bestCluster.score = score;
+                bestCluster.rotation = rotation;
+                bestCluster.position = position;
+                bestCluster.out = out;
             }
 
             /*
@@ -500,57 +580,11 @@ protected:
             i++;
         }
 
-        if(config.calib.find(request.object) == config.calib.end()) return false;
-        if(config.calib[request.object].dimensions.size() == 0) return false;
-
-        std::vector<float> dims = config.calib[request.object].dimensions;
-
-        if(best_score < 1.0) {
-            ros::Time stamp = lastPC->header.stamp;
-            response.pose.header.stamp = stamp;
-            response.pose.header.frame_id = shelf_frame;
-            Eigen::Quaternionf quaternion(best_rotation);
-            response.pose.pose.position.x = best_position.x;
-            response.pose.pose.position.y = best_position.y;
-            response.pose.pose.position.z = best_position.z;
-            response.pose.pose.orientation.x = quaternion.x();
-            response.pose.pose.orientation.y = quaternion.y();
-            response.pose.pose.orientation.z = quaternion.z();
-            response.pose.pose.orientation.w = quaternion.w();
-            listener.transformPose(base_frame, response.pose, response.pose);
-            pose_pub.publish(response.pose);
-            visualization_msgs::Marker marker;
-
-            marker.header.frame_id = shelf_frame;
-            marker.header.stamp = ros::Time(0);
-            marker.type = visualization_msgs::Marker::CUBE;
-            marker.action = visualization_msgs::Marker::ADD;
-            marker.pose.position.x = best_position.x;
-            marker.pose.position.y = best_position.y;
-            marker.pose.position.z = best_position.z;
-            marker.pose.orientation.x = quaternion.x();
-            marker.pose.orientation.y = quaternion.y();
-            marker.pose.orientation.z = quaternion.z();
-            marker.pose.orientation.w = quaternion.w();
-            marker.scale.x = dims[0];
-            marker.scale.y = dims[1];
-            marker.scale.z = dims[2];
-            marker.color.r = 40.0;
-            marker.color.g = 230.0;
-            marker.color.b = 40.0;
-            marker.color.a = 0.7;
-            marker_pub.publish(marker);
-        }
-
         out->header.frame_id = shelf_frame;
 
         //marker_pub.publish(array_msg);
-        pointcloud_pub.publish(out);
-        samples.clear();
-        //pointcloud_pub.publish(pubcloud);
-        return true;
-    }
-
+		return bestCluster;
+	}
     float detectCuboidPose(
         // Object name
         std::string object,
