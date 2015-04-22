@@ -8,6 +8,7 @@
 #include <pcl/point_types.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/crop_box.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/statistical_outlier_removal.h>
@@ -211,29 +212,46 @@ protected:
             // ------------------------------
             pcl::PassThrough<PointT> filter;
             //pcl::IndicesPtr indices(new std::vector<int>);
+            //
+            if(request.command == "tray") {
+                Eigen::Vector4f minPoint, maxPoint;
+                Eigen::Vector3f translation;
+                Eigen::Vector3f rotation;
 
-            if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
-            std::vector<float>& limits = config.bin_limits[request.command];
+                // Set up tray translation here.
 
-            filter.setInputCloud(out);
-            filter.setFilterFieldName("x");
-            filter.setFilterLimits(limits[0], limits[1]);
-            //filter.filter(*indices);
-            filter.filter(*out);
+                pcl::CropBox<PointT> trayFilter;
+                trayFilter.setMin(minPoint);
+                trayFilter.setMax(maxPoint);
+                trayFilter.setTranslation(translation);
+                trayFilter.setRotation(rotation);
 
-            filter.setInputCloud(out);
-            //filter.setIndices(indices);
-            filter.setFilterFieldName("y");
-            filter.setFilterLimits(limits[2], limits[3]);
-            //filter.filter(*indices);
-            filter.filter(*out);
+                trayFilter.setInputCloud(out);
+                trayFilter.filter(*out);
+            } else {
+                if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
+                std::vector<float>& limits = config.bin_limits[request.command];
 
-            filter.setInputCloud(out);
-            //filter.setIndices(indices);
-            filter.setFilterFieldName("z");
-            filter.setFilterLimits(limits[4], limits[5]);
-            //filter.filter(*indices);
-            filter.filter(*out);
+                filter.setInputCloud(out);
+                filter.setFilterFieldName("x");
+                filter.setFilterLimits(limits[0], limits[1]);
+                //filter.filter(*indices);
+                filter.filter(*out);
+
+                filter.setInputCloud(out);
+                //filter.setIndices(indices);
+                filter.setFilterFieldName("y");
+                filter.setFilterLimits(limits[2], limits[3]);
+                //filter.filter(*indices);
+                filter.filter(*out);
+
+                filter.setInputCloud(out);
+                //filter.setIndices(indices);
+                filter.setFilterFieldName("z");
+                filter.setFilterLimits(limits[4], limits[5]);
+                //filter.filter(*indices);
+                filter.filter(*out);
+            }
 
             // ------------------------------------
             // Filter out statistical outliers
