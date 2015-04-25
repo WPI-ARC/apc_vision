@@ -1,6 +1,18 @@
 <launch>
     <arg name="config" value="$(find apc_vision)/config.yaml"/>
+
     <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
+        <arg name="camera_name" value="camera_left"/>
+        <!--<arg name="device_index" value=""/>-->
+        <arg name="device_serial_number" value="K8VF0780347000071P"/>
+        <arg name="confidence_threshold" value="100"/>
+        <arg name="rgb_resolution" value="WXGA_H"/>
+    </include>
+
+    <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
+        <arg name="camera_name" value="camera_right"/>
+        <!--<arg name="device_index" value=""/>-->
+        <arg name="device_serial_number" value="K8VF0780404000181V"/>
         <arg name="confidence_threshold" value="100"/>
         <arg name="rgb_resolution" value="WXGA_H"/>
     </include>
@@ -36,8 +48,10 @@
           args="-0.0141 0.07435 -0.130 0.261799388 3.40339204 -0.122173048 /arm_left_link_7_t /senz3d_depth_optical_frame 100"/>
     
 -->
-    <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
-          args="-0.0141 0.07435 -0.130 0.244346095 3.24631241 -0.0959931089  /arm_left_link_7_t /senz3d_depth_optical_frame 100"/>
+    <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="-0.0141 0.07435 -0.130 0.244346095 3.22885912 -0.0959931089  /arm_left_link_7_t /camera_left_depth_optical_frame 100"/>
+    <node name="right_palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="-0.0141 0.07435 -0.130 0.244346095 3.1415926535 -0.0959931089  /arm_right_link_7_t /camera_right_depth_optical_frame 100"/>
     <!--
     <node name="palm_camera_tf" pkg="tf" type="static_transform_publisher"
           args="-0.0141 0.07435 -0.130 0.20943951 3.21140582 -0.0698131701 /arm_left_link_7_t /senz3d_depth_optical_frame 100"/>

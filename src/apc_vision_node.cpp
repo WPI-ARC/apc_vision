@@ -11,6 +11,7 @@
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/registration/icp.h>
 
 #include <pcl/features/moment_of_inertia_estimation.h>
 
@@ -63,16 +64,16 @@ typedef pcl::PointXYZRGB PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
 typedef pcl::PointCloud<pcl::PointUV> UVCloud;
 
-const static std::string xyz_topic = "/senz3d/points_xyzrgb";
-const static std::string uv_topic = "/senz3d/points_uv";
-const static std::string image_topic = "/senz3d/color";
+const static std::string xyz_topic = "/camera_left/points_xyzrgb";
+const static std::string uv_topic = "/camera_left/points_uv";
+const static std::string image_topic = "/camera_left/color";
 const static std::string out_topic = "/object_segmentation/points_xyz";
 const static std::string pose_topic = "/object_segmentation/pose";
 const static std::string marker_topic = "/object_segmentation/bounding_boxes";
 const static std::string limits_topic = "/object_segmentation/bin_limits";
 
 const static std::string shelf_frame = "/shelf";
-const static std::string camera_frame = "/senz3d_depth_optical_frame";
+const static std::string camera_frame = "/camera_left_depth_optical_frame";
 const static std::string base_frame = "/base_link";
 
 struct ObjInfo {
@@ -246,6 +247,21 @@ protected:
             //sor.filter (*indices);
             sor.filter(*out);
 
+            // Use icp to match clouds
+            //if(samples.size() > 0) {
+			if(0){
+                pcl::IterativeClosestPoint<PointT, PointT> icp;
+                icp.setMaximumIterations(50);
+                icp.setInputSource(out);
+                icp.setInputTarget(samples[0]);
+                PointCloud::Ptr p(new PointCloud);
+                icp.align(*p);
+                if(icp.hasConverged()) {
+                    out = p;
+                }
+            }
+			//pointcloud_pub.publish(out);
+
             samples.push_back(out);
 
             return true;
@@ -280,49 +296,95 @@ protected:
 	}
     bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
         
-		std::string object = request.object;
-		std::vector<float> dims = config.calib[request.object].dimensions;        
+		std::string object1 = request.object1;
+		std::string object2 = request.object2;
+
+		std::vector<float> dims1 = config.calib[request.object1].dimensions;        
+		std::vector<float> dims2 = config.calib[request.object2].dimensions;        
 
         // Combine sampled pointclouds.
-        PointCloud::Ptr out(new PointCloud);
-        std::list<BestCluster> bestCluster;
-        std::list<BestCluster>::iterator it=bestCluster.begin();
-        for(int i = 0 ; i < samples.size(); i++, it++) {
-			bestCluster.push_back(extractClusters(samples[i], object));
-			showMarkers(it, dims);
-			pointcloud_pub.publish(samples[i]);
-            *out += *samples[i];
-            ros::Duration(2).sleep(); 
+        PointCloud::Ptr out1(new PointCloud);
+		PointCloud::Ptr out2(new PointCloud);
+
+        std::list<BestCluster> bestCluster1;
+        std::list<BestCluster> bestCluster2;
+
+        std::list<BestCluster>::iterator it1=bestCluster1.begin();
+        std::list<BestCluster>::iterator it2=bestCluster2.begin();
+
+        for(int i = 0 ; i < samples.size(); i++, it1++) {
+			bestCluster1.push_back(extractClusters(samples[i], object1));
+			//showMarkers(it1, dims1);
+			//pointcloud_pub.publish(samples[i]);
+            *out1 += *samples[i];
+            //ros::Duration(2).sleep(); 
         }
-        bestCluster.push_back(extractClusters(out, object));
+        bestCluster1.push_back(extractClusters(out1, object1));
         
-        if(config.calib.find(request.object) == config.calib.end()) return false;
-        if(config.calib[request.object].dimensions.size() == 0) return false;
+        if(config.calib.find(request.object1) == config.calib.end()) return false;
+        if(config.calib[request.object1].dimensions.size() == 0) return false;
 
         // Get bestCluster
-        std::list<BestCluster>::iterator result = std::min_element(bestCluster.begin(), bestCluster.end(), bestScoreComparison);
-        if(bestCluster.end()==result)
+        std::list<BestCluster>::iterator result1 = std::min_element(bestCluster1.begin(), bestCluster1.end(), bestScoreComparison);
+        if(bestCluster1.end()==result1)
         {
 			return false;
 		}
 		else
 		{
 			ros::Time stamp = lastPC->header.stamp;
-			response.pose.header.stamp = stamp;
-			response.pose.header.frame_id = shelf_frame;
-			Eigen::Quaternionf quaternion(result->rotation);
-			response.pose.pose.position.x = result->position.x;
-			response.pose.pose.position.y = result->position.y;
-			response.pose.pose.position.z = result->position.z;
-			response.pose.pose.orientation.x = quaternion.x();
-			response.pose.pose.orientation.y = quaternion.y();
-			response.pose.pose.orientation.z = quaternion.z();
-			response.pose.pose.orientation.w = quaternion.w();
-			listener.transformPose(base_frame, response.pose, response.pose);
-			pose_pub.publish(response.pose);
-            showMarkers(result,dims);
+			response.pose1.header.stamp = stamp;
+			response.pose1.header.frame_id = shelf_frame;
+			Eigen::Quaternionf quaternion(result1->rotation);
+			response.pose1.pose.position.x = result1->position.x;
+			response.pose1.pose.position.y = result1->position.y;
+			response.pose1.pose.position.z = result1->position.z;
+			response.pose1.pose.orientation.x = quaternion.x();
+			response.pose1.pose.orientation.y = quaternion.y();
+			response.pose1.pose.orientation.z = quaternion.z();
+			response.pose1.pose.orientation.w = quaternion.w();
+			//listener.transformPose(base_frame, response.pose1, response.pose1);
+			//pose_pub.publish(response.pose1);
+            showMarkers(result1,dims1);
         }
-        pointcloud_pub.publish(out);
+        pointcloud_pub.publish(result1->out);
+		
+		for(int i = 0 ; i < samples.size(); i++, it2++) {
+			bestCluster2.push_back(extractClusters(samples[i], object2));
+			//showMarkers(it2, dims2);
+			//pointcloud_pub.publish(samples[i]);
+            *out2 += *samples[i];
+            //ros::Duration(2).sleep(); 
+        }
+        bestCluster2.push_back(extractClusters(out2, object2));
+        
+        if(config.calib.find(request.object2) == config.calib.end()) return false;
+        if(config.calib[request.object2].dimensions.size() == 0) return false;
+
+        // Get bestCluster
+        std::list<BestCluster>::iterator result2 = std::min_element(bestCluster2.begin(), bestCluster2.end(), bestScoreComparison);
+        if(bestCluster2.end()==result2)
+        {
+			return false;
+		}
+		else
+		{
+			ros::Time stamp = lastPC->header.stamp;
+			response.pose2.header.stamp = stamp;
+			response.pose2.header.frame_id = shelf_frame;
+			Eigen::Quaternionf quaternion(result2->rotation);
+			response.pose2.pose.position.x = result2->position.x;
+			response.pose2.pose.position.y = result2->position.y;
+			response.pose2.pose.position.z = result2->position.z;
+			response.pose2.pose.orientation.x = quaternion.x();
+			response.pose2.pose.orientation.y = quaternion.y();
+			response.pose2.pose.orientation.z = quaternion.z();
+			response.pose2.pose.orientation.w = quaternion.w();
+			//listener.transformPose(base_frame, response.pose2, response.pose2);
+			//pose_pub.publish(response.pose2);
+            showMarkers(result2,dims2);
+        }
+        pointcloud_pub.publish(result2->out);
 		
         samples.clear();
         //pointcloud_pub.publish(pubcloud);
@@ -372,7 +434,7 @@ protected:
             feature_extractor.compute();
 
             PointT minPoint, maxPoint, position;
-            Eigen::Matrix3f rotation;
+            Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
             Eigen::Vector3f mass_center;
 
             feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
@@ -647,34 +709,34 @@ protected:
                     if(score < best_score) {
                         best_score = score;
                         best_rotation = Eigen::Matrix3f::Identity();
-                    }
-                    if(i == 0 && j == 1 && k == 2) {
-                        new_dims = known_dims;
-                    } else if(i == 0 && j == 2 && k == 1) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
-                        new_dims[0] = known_dims[0];
-                        new_dims[1] = known_dims[2];
-                        new_dims[2] = known_dims[1];
-                    } else if(i == 1 && j == 0 && k == 2) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
-                        new_dims[0] = known_dims[1];
-                        new_dims[1] = known_dims[0];
-                        new_dims[2] = known_dims[2];
-                    } else if(i == 1 && j == 2 && k == 0) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
-                        new_dims[1] = known_dims[0];
-                        new_dims[2] = known_dims[1];
-                        new_dims[0] = known_dims[2];
-                    } else if(i == 2 && j == 0 && k == 1) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
-                        new_dims[2] = known_dims[0];
-                        new_dims[0] = known_dims[1];
-                        new_dims[1] = known_dims[2];
-                    } else if(i == 2 && j == 1 && k == 0) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
-                        new_dims[0] = known_dims[2];
-                        new_dims[1] = known_dims[1];
-                        new_dims[2] = known_dims[0];
+                        if(i == 0 && j == 1 && k == 2) {
+                            new_dims = known_dims;
+                        } else if(i == 0 && j == 2 && k == 1) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
+                            new_dims[0] = known_dims[0];
+                            new_dims[1] = known_dims[2];
+                            new_dims[2] = known_dims[1];
+                        } else if(i == 1 && j == 0 && k == 2) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
+                            new_dims[0] = known_dims[1];
+                            new_dims[1] = known_dims[0];
+                            new_dims[2] = known_dims[2];
+                        } else if(i == 1 && j == 2 && k == 0) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
+                            new_dims[1] = known_dims[0];
+                            new_dims[2] = known_dims[1];
+                            new_dims[0] = known_dims[2];
+                        } else if(i == 2 && j == 0 && k == 1) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
+                            new_dims[2] = known_dims[0];
+                            new_dims[0] = known_dims[1];
+                            new_dims[1] = known_dims[2];
+                        } else if(i == 2 && j == 1 && k == 0) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
+                            new_dims[0] = known_dims[2];
+                            new_dims[1] = known_dims[1];
+                            new_dims[2] = known_dims[0];
+                        }
                     }
 
                     /*

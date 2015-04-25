@@ -6,7 +6,7 @@
 
 int main(int argc, char** argv) {
 
-    if(argc < 2) {
+    if(argc < 3) {
         std::cout << "Needs one argument (which object?)" << std::endl;
         return -1;
     }
@@ -78,6 +78,28 @@ int main(int argc, char** argv) {
         sample.request.command = bin;
 
         geometry_msgs::PoseStamped p;
+        p.pose = pose3;
+
+        move.request.pose = p;
+        move.request.arm = "arm_left";
+        move.request.tolerance = true;
+
+        ros::service::call("move_group_service", move);
+        if(!move.response.success) {
+            std::cout << "move_group_service returned failure" << std::endl;
+            return -1;
+        }
+        ros::service::call("sample_vision", sample);
+        ros::service::call("sample_vision", sample);
+    }
+
+    {
+        motoman_moveit::move_group_server move;
+        apc_vision::SampleVision sample;
+
+        sample.request.command = bin;
+
+        geometry_msgs::PoseStamped p;
         p.pose = pose1;
 
         move.request.pose = p;
@@ -89,6 +111,7 @@ int main(int argc, char** argv) {
             std::cout << "move_group_service returned failure" << std::endl;
             return -1;
         }
+        ros::service::call("sample_vision", sample);
         ros::service::call("sample_vision", sample);
     }
 
@@ -111,26 +134,6 @@ int main(int argc, char** argv) {
             return -1;
         }
         ros::service::call("sample_vision", sample);
-    }
-
-    {
-        motoman_moveit::move_group_server move;
-        apc_vision::SampleVision sample;
-
-        sample.request.command = bin;
-
-        geometry_msgs::PoseStamped p;
-        p.pose = pose3;
-
-        move.request.pose = p;
-        move.request.arm = "arm_left";
-        move.request.tolerance = true;
-
-        ros::service::call("move_group_service", move);
-        if(!move.response.success) {
-            std::cout << "move_group_service returned failure" << std::endl;
-            return -1;
-        }
         ros::service::call("sample_vision", sample);
     }
 
@@ -153,10 +156,13 @@ int main(int argc, char** argv) {
             return -1;
         }
         ros::service::call("sample_vision", sample);
+        ros::service::call("sample_vision", sample);
     }
-
+	
     apc_vision::ProcessVision process;
-    process.request.object = argv[1];
+    process.request.object1 = argv[1];
+	process.request.object2 = argv[2];
+
     process.request.bin = bin;
 
     ros::service::call("process_vision", process);
