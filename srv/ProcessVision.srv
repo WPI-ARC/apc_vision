@@ -7,3 +7,4 @@ string bin
 int32 camera
 ---
 geometry_msgs/PoseStamped pose
+sensor_msgs/PointCloud2 object_points
