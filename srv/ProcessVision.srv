@@ -7,4 +7,5 @@ string bin
 int32 camera
 ---
 geometry_msgs/PoseStamped pose
+geometry_msgs/Vector3 size
 sensor_msgs/PointCloud2 object_points
