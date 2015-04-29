@@ -16,40 +16,9 @@
 using namespace std;
 
 /*
- * \class Object
- *  Contains the properties of a given object
- *  TODO: Add more properties(such as features, 3D models) of the object as data members
- *  TODO: Move object definition to its own header file
- */
-class Object
-{
-private:
-
-	int ID;
-	string Name;
-
-public:
-
-	// ctr
-	Object(int id, string name):  ID(id), Name(name){}
-	Object():		 ID(0), Name(""){}
-
-	// getters and setters
-	string getName() const { return Name; }
-	void setName(string name) { Name = name; }
-
-	int getID() const { return ID; }
-	void setID(int id){ ID = id; }
-
-	// dtr
-	~Object(){}
-
-};
-
-/*
  * Hash map for retrieving the value as an instance of an object given its key name as string
  */
-unordered_map<string, Object> DatabaseMap;
+unordered_map<string, object_database::Object> DatabaseMap;
 
 /*
  * \fn bool initDatabase()
@@ -78,7 +47,10 @@ bool initDatabase(string strDirectory)
 				 std::transform(objectName.begin(), objectName.end(), objectName.begin(), ::tolower);
 
 				 //Initialize the database with the name and instance of the object
-				 DatabaseMap[objectName] = Object(id++, objectName);
+                 object_database::Object object;
+                 object.object_name = objectName;
+                 object.id = id++;
+                 DatabaseMap[objectName] = object;
 //				 cout<<objectName<<"\n";
 			 }
 		 }
@@ -100,24 +72,28 @@ bool initDatabase(string strDirectory)
  * \return success as a boolean
  * TODO: Add complex properties of the objects to be returned as a response
  */
-bool findObject (object_database::DatabaseRetrievalService::Request &req,
+bool findObjectPosition (object_database::DatabaseRetrievalService::Request &req,
 		object_database::DatabaseRetrievalService::Response &res)
 {
-	unordered_map<string, Object>::const_iterator got = DatabaseMap.find (req.object_name);
-
-	// If object not found
-	if ( got == DatabaseMap.end() )
-	{
-		ROS_INFO("Not found");
-		return false;
-	}
-	// Object found
-	else
-	{
-		// return response as ID of the object
-		res.id = (got->second).getID();
-	}
-	return true;
+    for (auto &item:req.listObject.listObjects)
+    {
+        unordered_map<string, object_database::Object>::const_iterator got = DatabaseMap.find (item.object_name);
+        cout<<"\nObject To Be Found: "<<item.object_name <<endl;
+        // If object not found
+        if ( got == DatabaseMap.end() )
+        {
+            ROS_INFO("Not found");
+            return false;
+        }
+        // Object found
+        else
+        {
+            object_database::Object object = (got->second);
+            // return response as ID of the object
+            res.listObjectWithPosition.listObjects.push_back(object);
+        }
+    }
+    return true;
 }
 
 int main(int argc, char **argv)
@@ -133,7 +109,7 @@ int main(int argc, char **argv)
 	initDatabase(strDirectory);
 
 	// Advertize the service
-	ros::ServiceServer service = n.advertiseService("object_database_server", findObject);
+    ros::ServiceServer service = n.advertiseService("object_database_server", findObjectPosition);
 	ROS_INFO("Ready to find objects.");
 
 	ros::spin();

@@ -14,16 +14,16 @@ using namespace std;
 /*
  * Hash map for storing the BinContents from the JSON file
  * Key: Bin Name
- * Value: List of Object Names
+ * Value: List of Objects
  */
-unordered_map<string, vector<string>> BinContents;
+unordered_map<string, vector<object_database::Object>> BinContents;
 
 /*
  * Ordered map for storing the WorkOrder from the JSON file
  * Key: Bin Name
- * Value: Object Name
+ * Value: Object
  */
-map<string, string> WorkOrder;
+map<string, object_database::Object> WorkOrder;
 
 /*
  * \fn void readJSONFile()
@@ -55,14 +55,17 @@ void readJSONFile(string *JsonFileName)
 		string binName = binNames[i];
 
 		Json::Value itemArray = binContents[binName];
-		vector<string> items;
+        vector<object_database::Object> items;
 
 		for(int j = 0; j < itemArray.size(); j++)
 		{
 			string objectName(itemArray[j].asString());
 			// Convert name of the objects to lower case for standardization purposes
 			std::transform(objectName.begin(), objectName.end(), objectName.begin(), ::tolower);
-			items.push_back(objectName);
+
+            object_database::Object object;
+            object.object_name = objectName;
+            items.push_back(object);
 		}
 		BinContents[binName] = items;
 	}
@@ -75,8 +78,21 @@ void readJSONFile(string *JsonFileName)
 		string itemName(item.get("item", "UTF-8").asString());
 		std::transform(itemName.begin(), itemName.end(), itemName.begin(), ::tolower);
 
-		WorkOrder[binName] = itemName;
+        object_database::Object object;
+        object.object_name = itemName;
+        WorkOrder[binName] = object;
 	}
+    cout<<"\nWork Order: \n";
+    for (auto& item: WorkOrder)
+    {
+        cout<<item.first<<"\n";
+    }
+    cout<<"\nBin Contents: \n";
+    for (auto& item: BinContents)
+    {
+        cout<<item.first<<"\n";
+    }
+
 }
 
 /*
@@ -86,35 +102,42 @@ void readJSONFile(string *JsonFileName)
  */
 void getObjects()
 {
-	// Create a node handle
-	ros::NodeHandle n;
+    // Create a node handle
+    ros::NodeHandle n;
 
-	// Create a service client
-	ros::ServiceClient client = n.serviceClient<object_database::DatabaseRetrievalService>("object_database_server");
+    // Create a service client
+    ros::ServiceClient client = n.serviceClient<object_database::DatabaseRetrievalService>("object_database_server");
 
-	object_database::DatabaseRetrievalService srv;
+    object_database::DatabaseRetrievalService srv;
 
-	string obj_name = "";
+    string obj_name = "";
 
-	// Retrieve the items in the WorkOrder from the database server
-	for (auto& item: WorkOrder)
-	{
-		obj_name = item.second;
+    int i = 0;
+    // Retrieve the items in the WorkOrder from the database server
+    for (auto& item: WorkOrder)
+    {
+        object_database::Object object = item.second;
 
-		srv.request.object_name = obj_name;
-		cout<<obj_name<<" "<<item.first<<endl;
-		if(client.call(srv))
-		{
-			ROS_INFO("Request for object %s sent. Here is the answer:", obj_name.c_str());
-			int ID = srv.response.id;
-			ROS_INFO("Found Object with ID: '%d'", ID);
-		}
-		else
-		{
-			ROS_ERROR("Failed to call service object_database_server");
-			exit(1);
-		}
-	}
+        srv.request.listObject.listObjects.push_back(object);
+        cout<<object<<" "<<item.first<<endl;
+        i++;
+    }
+
+    if(client.call(srv))
+    {
+        ROS_INFO("Request for objects sent. Here is the answer:");
+        for(auto&item:srv.response.listObjectWithPosition.listObjects)
+        {
+            int ID = item.id;
+            ROS_INFO("Found object with id: '%d'", ID);
+        }
+
+    }
+    else
+    {
+        ROS_ERROR("Failed to call service object_database_server");
+        exit(1);
+    }
 }
 
 int main(int argc, char **argv)
@@ -132,7 +155,7 @@ int main(int argc, char **argv)
 	readJSONFile(&JsonFileName);
 
 	// Get the objects from the database
-	getObjects();
+    getObjects();
 
 	return 0;
 }
