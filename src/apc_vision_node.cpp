@@ -64,16 +64,20 @@ typedef pcl::PointXYZRGB PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
 typedef pcl::PointCloud<pcl::PointUV> UVCloud;
 
-const static std::string xyz_topic = "/camera_left/points_xyzrgb";
-const static std::string uv_topic = "/camera_left/points_uv";
-const static std::string image_topic = "/camera_left/color";
+const static std::string right_xyz_topic = "/camera_right/points_xyzrgb";
+const static std::string right_uv_topic = "/camera_right/points_uv";
+const static std::string right_image_topic = "/camera_right/color";
+const static std::string left_xyz_topic = "/camera_left/points_xyzrgb";
+const static std::string left_uv_topic = "/camera_left/points_uv";
+const static std::string left_image_topic = "/camera_left/color";
 const static std::string out_topic = "/object_segmentation/points_xyz";
 const static std::string pose_topic = "/object_segmentation/pose";
 const static std::string marker_topic = "/object_segmentation/bounding_boxes";
 const static std::string limits_topic = "/object_segmentation/bin_limits";
 
 const static std::string shelf_frame = "/shelf";
-const static std::string camera_frame = "/camera_left_depth_optical_frame";
+const static std::string right_camera_frame = "/camera_right_depth_optical_frame";
+const static std::string left_camera_frame = "/camera_left_depth_optical_frame";
 const static std::string base_frame = "/base_link";
 
 struct ObjInfo {
@@ -92,22 +96,26 @@ struct Config {
     BinLimitsMap bin_limits;
 };
 struct BestCluster{
-	Eigen::Matrix3f rotation;
-	PointT position;
-	float score;
-	PointCloud::Ptr out;
+    Eigen::Matrix3f rotation;
+    PointT position;
+    float score;
+    PointCloud::Ptr out;
 };
 bool bestScoreComparison(const BestCluster &a, const BestCluster &b)
 {
-	return a.score<b.score;
+    return a.score<b.score;
 }
 class VisionProcessor {
 public:
     VisionProcessor(ros::NodeHandle& nh, std::string obj, Config config) :
-        pointcloud_sub(nh, xyz_topic, 1),
-        uv_sub(nh, uv_topic, 1),
-        image_sub(nh.subscribe(image_topic, 1, &VisionProcessor::image_cb, this)),
-        sync(pointcloud_sub, uv_sub, 10),
+        pointcloud_sub_left(nh, left_xyz_topic, 1),
+        pointcloud_sub_right(nh, right_xyz_topic, 1),
+        uv_sub_left(nh, left_uv_topic, 1),
+        uv_sub_right(nh, right_uv_topic, 1),
+        left_image_sub(nh.subscribe(left_image_topic, 1, &VisionProcessor::left_image_cb, this)),
+        right_image_sub(nh.subscribe(right_image_topic, 1, &VisionProcessor::right_image_cb, this)),
+        left_sync(pointcloud_sub_left, uv_sub_left, 10),
+        right_sync(pointcloud_sub_right, uv_sub_right, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
         pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
         sample_server(nh.advertiseService("sample_vision", &VisionProcessor::sample_cb, this)),
@@ -116,7 +124,8 @@ public:
         marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1)),
         limits_pub(nh.advertise<visualization_msgs::Marker>(limits_topic, 1))
     {
-        sync.registerCallback(boost::bind(&VisionProcessor::process, this, _1, _2));
+        left_sync.registerCallback(boost::bind(&VisionProcessor::process_left, this, _1, _2));
+        right_sync.registerCallback(boost::bind(&VisionProcessor::process_right, this, _1, _2));
 
         for(Config::CalibMap::iterator it = config.calib.begin(); it != config.calib.end(); it++) {
             objDetectors[it->first] = ObjectRecognizer(it->second.calibFiles);
@@ -124,11 +133,17 @@ public:
     }
 
 protected:
-    message_filters::Subscriber<sensor_msgs::PointCloud2> pointcloud_sub;
-    message_filters::Subscriber<sensor_msgs::PointCloud2> uv_sub;
-    ros::Subscriber image_sub;
+    message_filters::Subscriber<sensor_msgs::PointCloud2> pointcloud_sub_left;
+    message_filters::Subscriber<sensor_msgs::PointCloud2> pointcloud_sub_right;
 
-    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> sync;
+    message_filters::Subscriber<sensor_msgs::PointCloud2> uv_sub_left;
+    message_filters::Subscriber<sensor_msgs::PointCloud2> uv_sub_right;
+
+    ros::Subscriber left_image_sub;
+    ros::Subscriber right_image_sub;
+
+    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> left_sync;
+    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> right_sync;
 
     ros::Publisher pointcloud_pub;
     ros::Publisher pose_pub;
@@ -139,27 +154,53 @@ protected:
 
     tf::TransformListener listener;
 
-    sensor_msgs::ImageConstPtr lastImage;
+    sensor_msgs::ImageConstPtr lastImage_left;
+    sensor_msgs::ImageConstPtr lastImage_right;
 
     Config config;
     std::map<std::string, ObjectRecognizer> objDetectors;
 
-    sensor_msgs::PointCloud2::ConstPtr lastPC;
-    sensor_msgs::PointCloud2::ConstPtr lastUVC;
+    sensor_msgs::PointCloud2::ConstPtr lastPC_left;
+    sensor_msgs::PointCloud2::ConstPtr lastUVC_left;
+    sensor_msgs::PointCloud2::ConstPtr lastPC_right;
+    sensor_msgs::PointCloud2::ConstPtr lastUVC_right;
 
     std::vector<PointCloud::Ptr> samples;
 
-    void image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastImage = img;
+    void left_image_cb(const sensor_msgs::ImageConstPtr& img) {
+        lastImage_left = img;
     }
 
-    void process(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
+    void right_image_cb(const sensor_msgs::ImageConstPtr& img) {
+        lastImage_right = img;
+    }
+
+    void process_left(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
                  const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
-        lastPC = pc_msg;
-        lastUVC = uv_msg;
+        lastPC_left = pc_msg;
+        lastUVC_left = uv_msg;
+    }
+
+    void process_right(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
+        lastPC_right = pc_msg;
+        lastUVC_right = uv_msg;
     }
 
     bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
+        sensor_msgs::PointCloud2::ConstPtr lastPC;
+        sensor_msgs::PointCloud2::ConstPtr lastUVC;
+        std::string camera_frame;
+
+        if(request.camera == SampleVision::Request::LEFT) {
+            lastPC = lastPC_left;
+            lastUVC = lastUVC_left;
+            camera_frame = left_camera_frame;
+        } else {
+            lastPC = lastPC_right;
+            lastUVC = lastUVC_right;
+            camera_frame = right_camera_frame;
+        }
+
         if(request.command != "reset") {
             if(!lastPC.get()) return false;
             if(!lastUVC.get()) return false;
@@ -323,7 +364,7 @@ protected:
         }
         else
         {
-            ros::Time stamp = lastPC->header.stamp;
+            ros::Time stamp = ros::Time::now();//lastPC->header.stamp;
             response.pose.header.stamp = stamp;
             response.pose.header.frame_id = shelf_frame;
             Eigen::Quaternionf quaternion(result->rotation);
