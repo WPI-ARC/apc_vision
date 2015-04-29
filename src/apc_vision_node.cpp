@@ -376,6 +376,15 @@ protected:
             response.pose.pose.orientation.z = quaternion.z();
             response.pose.pose.orientation.w = quaternion.w();
             listener.transformPose(base_frame, response.pose, response.pose);
+
+            response.size.x = dims[0];
+            response.size.y = dims[1];
+            response.size.z = dims[2];
+
+            pcl::PCLPointCloud2 pclpc2;
+            pcl::toPCLPointCloud2(*result->out, pclpc2);
+            pcl_conversions::fromPCL(pclpc2,response.object_points);
+
             pose_pub.publish(response.pose);
             showMarkers(result,dims);
         }
