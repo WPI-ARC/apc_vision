@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
         apc_vision::SampleVision sample;
 
         sample.request.command = bin;
+        sample.request.camera = apc_vision::SampleVision::Request::LEFT;
 
         geometry_msgs::PoseStamped p;
         p.pose = pose3;
@@ -98,6 +99,7 @@ int main(int argc, char** argv) {
         apc_vision::SampleVision sample;
 
         sample.request.command = bin;
+        sample.request.camera = apc_vision::SampleVision::Request::LEFT;
 
         geometry_msgs::PoseStamped p;
         p.pose = pose1;
@@ -120,6 +122,7 @@ int main(int argc, char** argv) {
         apc_vision::SampleVision sample;
 
         sample.request.command = bin;
+        sample.request.camera = apc_vision::SampleVision::Request::LEFT;
 
         geometry_msgs::PoseStamped p;
         p.pose = pose2;
@@ -142,6 +145,7 @@ int main(int argc, char** argv) {
         apc_vision::SampleVision sample;
 
         sample.request.command = bin;
+        sample.request.camera = apc_vision::SampleVision::Request::LEFT;
 
         geometry_msgs::PoseStamped p;
         p.pose = pose4;
@@ -160,10 +164,9 @@ int main(int argc, char** argv) {
     }
 	
     apc_vision::ProcessVision process;
-    process.request.object1 = argv[1];
-	process.request.object2 = argv[2];
-
+    process.request.target = argv[1];
     process.request.bin = bin;
+    process.request.camera = apc_vision::ProcessVision::Request::LEFT;
 
     ros::service::call("process_vision", process);
 

@@ -1,4 +1,9 @@
-string object
+uint8 LEFT = 0
+uint8 RIGHT = 1
+
+string target
+string[] objects
 string bin
+int32 camera
 ---
 geometry_msgs/PoseStamped pose
