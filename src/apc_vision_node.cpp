@@ -11,6 +11,7 @@
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/registration/icp.h>
 
 #include <pcl/features/moment_of_inertia_estimation.h>
 
@@ -287,6 +288,21 @@ protected:
             //sor.filter (*indices);
             sor.filter(*out);
 
+            // Use icp to match clouds
+            //if(samples.size() > 0) {
+			if(0){
+                pcl::IterativeClosestPoint<PointT, PointT> icp;
+                icp.setMaximumIterations(50);
+                icp.setInputSource(out);
+                icp.setInputTarget(samples[0]);
+                PointCloud::Ptr p(new PointCloud);
+                icp.align(*p);
+                if(icp.hasConverged()) {
+                    out = p;
+                }
+            }
+			//pointcloud_pub.publish(out);
+
             samples.push_back(out);
 
             return true;
@@ -413,7 +429,7 @@ protected:
             feature_extractor.compute();
 
             PointT minPoint, maxPoint, position;
-            Eigen::Matrix3f rotation;
+            Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
             Eigen::Vector3f mass_center;
 
             feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
@@ -505,34 +521,34 @@ protected:
                     if(score < best_score) {
                         best_score = score;
                         best_rotation = Eigen::Matrix3f::Identity();
-                    }
-                    if(i == 0 && j == 1 && k == 2) {
-                        new_dims = known_dims;
-                    } else if(i == 0 && j == 2 && k == 1) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
-                        new_dims[0] = known_dims[0];
-                        new_dims[1] = known_dims[2];
-                        new_dims[2] = known_dims[1];
-                    } else if(i == 1 && j == 0 && k == 2) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
-                        new_dims[0] = known_dims[1];
-                        new_dims[1] = known_dims[0];
-                        new_dims[2] = known_dims[2];
-                    } else if(i == 1 && j == 2 && k == 0) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
-                        new_dims[1] = known_dims[0];
-                        new_dims[2] = known_dims[1];
-                        new_dims[0] = known_dims[2];
-                    } else if(i == 2 && j == 0 && k == 1) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
-                        new_dims[2] = known_dims[0];
-                        new_dims[0] = known_dims[1];
-                        new_dims[1] = known_dims[2];
-                    } else if(i == 2 && j == 1 && k == 0) {
-                        best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
-                        new_dims[0] = known_dims[2];
-                        new_dims[1] = known_dims[1];
-                        new_dims[2] = known_dims[0];
+                        if(i == 0 && j == 1 && k == 2) {
+                            new_dims = known_dims;
+                        } else if(i == 0 && j == 2 && k == 1) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, x);
+                            new_dims[0] = known_dims[0];
+                            new_dims[1] = known_dims[2];
+                            new_dims[2] = known_dims[1];
+                        } else if(i == 1 && j == 0 && k == 2) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z);
+                            new_dims[0] = known_dims[1];
+                            new_dims[1] = known_dims[0];
+                            new_dims[2] = known_dims[2];
+                        } else if(i == 1 && j == 2 && k == 0) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y) * Eigen::AngleAxisf(0.5*M_PI, x);
+                            new_dims[1] = known_dims[0];
+                            new_dims[2] = known_dims[1];
+                            new_dims[0] = known_dims[2];
+                        } else if(i == 2 && j == 0 && k == 1) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, z) * Eigen::AngleAxisf(0.5*M_PI, y);
+                            new_dims[2] = known_dims[0];
+                            new_dims[0] = known_dims[1];
+                            new_dims[1] = known_dims[2];
+                        } else if(i == 2 && j == 1 && k == 0) {
+                            best_rotation = Eigen::AngleAxisf(0.5*M_PI, y);
+                            new_dims[0] = known_dims[2];
+                            new_dims[1] = known_dims[1];
+                            new_dims[2] = known_dims[0];
+                        }
                     }
 
                     /*
