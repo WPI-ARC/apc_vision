@@ -296,7 +296,7 @@ protected:
     }
     bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
 
-        std::string object = request.target;
+        std::string object = request.target.name;
         std::vector<float> dims = config.calib[object].dimensions;
 
         // Combine sampled pointclouds.

@@ -164,7 +164,8 @@ int main(int argc, char** argv) {
     }
 	
     apc_vision::ProcessVision process;
-    process.request.target = argv[1];
+    process.request.target.name = argv[1];
+    process.request.target.number = 1;
     process.request.bin = bin;
     process.request.camera = apc_vision::ProcessVision::Request::LEFT;
 

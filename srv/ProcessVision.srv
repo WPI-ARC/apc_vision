@@ -1,8 +1,8 @@
 uint8 LEFT = 0
 uint8 RIGHT = 1
 
-string target
-string[] objects
+APCObject target
+APCObject[] objects
 string bin
 int32 camera
 ---
