@@ -424,12 +424,14 @@ protected:
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
         {
+            PointCloud::Ptr segment(new PointCloud);
             pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
                 out->points[*pit].r = 0;
                 out->points[*pit].g = 200-i*50;
                 out->points[*pit].b = i*50;
                 indices_->indices.push_back(*pit);
+                segment->points.push_back(out->points[*.pit]);
             }
 
             pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
@@ -457,7 +459,7 @@ protected:
                 bestCluster.score = score;
                 bestCluster.rotation = rotation;
                 bestCluster.position = position;
-                bestCluster.out = out;
+                bestCluster.out = segment;
             }
 
             i++;
