@@ -431,7 +431,7 @@ protected:
                 out->points[*pit].g = 200-i*50;
                 out->points[*pit].b = i*50;
                 indices_->indices.push_back(*pit);
-                segment->points.push_back(out->points[*.pit]);
+                segment->points.push_back(out->points[*pit]);
             }
 
             pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
