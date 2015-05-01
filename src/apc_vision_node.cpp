@@ -384,6 +384,8 @@ protected:
             pcl::PCLPointCloud2 pclpc2;
             pcl::toPCLPointCloud2(*result->out, pclpc2);
             pcl_conversions::fromPCL(pclpc2,response.object_points);
+            response.object_points.header.stamp = ros::Time::now();
+            response.object_points.header.frame_id = shelf_frame;
 
             pose_pub.publish(response.pose);
             showMarkers(result,dims);
