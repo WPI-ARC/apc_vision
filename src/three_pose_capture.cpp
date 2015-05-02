@@ -1,21 +1,20 @@
 #include <ros/ros.h>
+#include <stdio.h>
 #include <motoman_moveit/move_group_server.h>
+#include <apc_vision/DatabaseRetrievalService.h>
 #include <apc_vision/SampleVision.h>
 #include <apc_vision/ProcessVision.h>
 #include <geometry_msgs/Pose.h>
 
 int main(int argc, char** argv) {
 
-    if(argc < 3) {
-        std::cout << "Needs one argument (which object?)" << std::endl;
-        return -1;
-    }
-
     ros::init(argc, argv, "move_there_move_back");
     ros::NodeHandle node_handle;  
     ros::AsyncSpinner spinner(4);
     spinner.start();
-                    
+
+    ros::service::waitForService("JSONServer");
+    std::cout << "SERVER STARTED!" << std::endl;
     ros::service::waitForService("sample_vision");
     std::cout << "SAMPLE STARTED!" << std::endl;
     ros::service::waitForService("process_vision");
@@ -64,6 +63,15 @@ int main(int argc, char** argv) {
     pose4.orientation.z = 0.680853;
     pose4.orientation.w = -0.378845;
 
+    apc_vision::APCObject target;
+    apc_vision::DatabaseRetrievalService database;
+    database.request.binName = "bin_A";
+    ros::service::call("JSONServer", database);
+
+    {
+        target = database.response.targetObject;
+//        std::cout<<target.name;
+    }
     std::string bin = "A";
 
     // Clear the vision buffer
@@ -164,8 +172,7 @@ int main(int argc, char** argv) {
     }
 	
     apc_vision::ProcessVision process;
-    process.request.target.name = argv[1];
-    process.request.target.number = 1;
+    process.request.target = target;
     process.request.bin = bin;
     process.request.camera = apc_vision::ProcessVision::Request::LEFT;
 

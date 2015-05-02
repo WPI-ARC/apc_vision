@@ -1,6 +1,18 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(apc_vision)
 
+# check c++11 / c++0x
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+if(COMPILER_SUPPORTS_CXX11)
+    set(CMAKE_CXX_FLAGS "-std=c++11")
+elseif(COMPILER_SUPPORTS_CXX0X)
+    set(CMAKE_CXX_FLAGS "-std=c++0x")
+else()
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+endif()
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -11,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf_conversions
   cv_bridge
   message_generation
+  jsoncpp
 )
 
 find_package(Boost 1.46 REQUIRED COMPONENTS filesystem)
@@ -60,6 +73,7 @@ add_message_files(
 ## Generate services in the 'srv' folder
 add_service_files(
     FILES
+    DatabaseRetrievalService.srv
     SampleVision.srv
     ProcessVision.srv
 )
@@ -117,10 +131,16 @@ include_directories(
 add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
 add_dependencies(apc_vision_node ${PROJECT_NAME}_gencpp)
 
+
+add_executable(JSONServer src/JSONServer.cpp)
+add_dependencies(
+    JSONServer ${PROJECT_NAME}_gencpp)
+
 add_executable(three_pose_capture src/three_pose_capture.cpp)
 add_dependencies(
     three_pose_capture ${PROJECT_NAME}_gencpp
     motoman_moveit_gencpp)
+
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -132,6 +152,8 @@ target_link_libraries(apc_vision_node
   ${Boost_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+
+target_link_libraries(JSONServer ${catkin_LIBRARIES})
 
 target_link_libraries(three_pose_capture
   ${catkin_LIBRARIES}

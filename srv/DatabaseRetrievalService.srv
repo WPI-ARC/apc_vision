@@ -1,0 +1,5 @@
+string binName
+---
+APCObject targetObject
+APCObject[] binContents
+
