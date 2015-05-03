@@ -257,11 +257,38 @@ protected:
             if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
             std::vector<float>& limits = config.bin_limits[request.command];
 
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = shelf_frame;
+            marker.header.stamp = ros::Time(0);
+            marker.type = visualization_msgs::Marker::CUBE;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.pose.position.x = (limits[0]+limits[1])/2;
+            marker.pose.position.y = (limits[2]+limits[3])/2;
+            marker.pose.position.z = (limits[4]+limits[5])/2;
+            marker.pose.orientation.x = 0;
+            marker.pose.orientation.y = 0;
+            marker.pose.orientation.z = 0;
+            marker.pose.orientation.w = 1;
+            marker.scale.x = limits[1]-limits[0];
+            marker.scale.y = limits[3]-limits[2];
+            marker.scale.z = limits[5]-limits[4];
+            marker.color.r = 40.0;
+            marker.color.g = 230.0;
+            marker.color.b = 40.0;
+            marker.color.a = 0.7;
+            limits_pub.publish(marker);
+
+            ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
+
+            ROS_INFO("%d points before filtering\n", out->points.size());
+
             filter.setInputCloud(out);
             filter.setFilterFieldName("x");
             filter.setFilterLimits(limits[0], limits[1]);
             //filter.filter(*indices);
             filter.filter(*out);
+
+            ROS_INFO("%d points left after filtering x\n", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -269,6 +296,7 @@ protected:
             filter.setFilterLimits(limits[2], limits[3]);
             //filter.filter(*indices);
             filter.filter(*out);
+            ROS_INFO("%d points left after filtering y\n", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -276,6 +304,7 @@ protected:
             filter.setFilterLimits(limits[4], limits[5]);
             //filter.filter(*indices);
             filter.filter(*out);
+            ROS_INFO("%d points left after filtering z\n", out->points.size());
 
             // ------------------------------------
             // Filter out statistical outliers
@@ -339,6 +368,7 @@ protected:
 
         std::string object = request.target.name;
         std::vector<float> dims = config.calib[object].dimensions;
+
 
         // Combine sampled pointclouds.
         PointCloud::Ptr out(new PointCloud);

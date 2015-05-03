@@ -71,7 +71,7 @@
           args="0.9 0.413907 0.787417 0 0 0 /base_link /shelf 100"/>
     -->
     <node name="base_shelf_tf" pkg="tf" type="static_transform_publisher"
-          args="1.34253 0.026963 0.775 0 0 0 /base_link /shelf 100"/>
+          args="1.34253 0.026963 -0.045 0 0 0 /base_link /shelf 100"/>
 
     <!--
     <node name="test_tf" pkg="tf" type="static_transform_publisher"
