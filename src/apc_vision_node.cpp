@@ -317,6 +317,8 @@ protected:
             //sor.filter (*indices);
             sor.filter(*out);
 
+            ROS_INFO("%d points left after SOR filter\n", out->points.size());
+
             // Use icp to match clouds
             //if(samples.size() > 0) {
 			if(0){
@@ -375,12 +377,22 @@ protected:
         std::list<BestCluster> bestCluster;
         std::list<BestCluster>::iterator it=bestCluster.begin();
         for(int i = 0 ; i < samples.size(); i++, it++) {
+            if(!samples[i]->points.size()) {
+                ROS_WARN("Empty pointcloud from sample %d\n", i);
+                continue;
+            }
             bestCluster.push_back(extractClusters(samples[i], object));
             showMarkers(it, dims);
             pointcloud_pub.publish(samples[i]);
             *out += *samples[i];
             ros::Duration(2).sleep(); 
         }
+
+        if(!out->points.size()) {
+            ROS_ERROR("Empty combinded pointcloud\n");
+            return false;
+        }
+
         bestCluster.push_back(extractClusters(out, object));
 
         if(config.calib.find(object) == config.calib.end()) return false;
@@ -405,6 +417,13 @@ protected:
             response.pose.pose.orientation.y = quaternion.y();
             response.pose.pose.orientation.z = quaternion.z();
             response.pose.pose.orientation.w = quaternion.w();
+            
+            bool success = listener.waitForTransform(shelf_frame, base_frame, stamp, ros::Duration(2.0));
+            // If transform isn't found in that time, give up
+            if(!success) {
+                ROS_WARN("Couldn't lookup transform from shelf to base_link!");
+                return false;
+            }
             listener.transformPose(base_frame, response.pose, response.pose);
 
             response.size.x = dims[0];
