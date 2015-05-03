@@ -105,7 +105,7 @@ bool retrieveObjects (apc_vision::DatabaseRetrievalService::Request &req,
 
 int main(int argc, char **argv)
 {
-    if (argc != 2)
+    if (argc < 2)
     {
         ROS_INFO("usage: provide JSON file name");
         return 1;

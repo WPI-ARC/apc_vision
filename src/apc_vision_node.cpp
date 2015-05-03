@@ -12,7 +12,7 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/registration/icp.h>
-
+#include <vector>
 #include <pcl/features/moment_of_inertia_estimation.h>
 
 #include <pcl/sample_consensus/method_types.h>
@@ -339,23 +339,10 @@ protected:
 
         std::string object = request.target.name;
         std::vector<float> dims = config.calib[object].dimensions;
-
-        // Combine sampled pointclouds.
-        PointCloud::Ptr out(new PointCloud);
-        std::list<BestCluster> bestCluster;
-        std::list<BestCluster>::iterator it=bestCluster.begin();
-        for(int i = 0 ; i < samples.size(); i++, it++) {
-            bestCluster.push_back(extractClusters(samples[i], object));
-            showMarkers(it, dims);
-            pointcloud_pub.publish(samples[i]);
-            *out += *samples[i];
-            ros::Duration(2).sleep(); 
-        }
-        bestCluster.push_back(extractClusters(out, object));
-
+        std::list<BestCluster> bestCluster = findBestCluster(object, dims);
         if(config.calib.find(object) == config.calib.end()) return false;
         if(config.calib[object].dimensions.size() == 0) return false;
-
+        
         // Get bestCluster
         std::list<BestCluster>::iterator result = std::min_element(bestCluster.begin(), bestCluster.end(), bestScoreComparison);
         if(bestCluster.end()==result)
@@ -379,13 +366,33 @@ protected:
             pose_pub.publish(response.pose);
             showMarkers(result,dims);
         }
-        pointcloud_pub.publish(out);
-
+        for (std::vector<apc_vision::APCObject>::iterator item = request.objects.begin(); item != request.objects.end(); item++) {
+            std::string object = item->name;
+            std::vector<float> dims = config.calib[object].dimensions;
+            std::list<BestCluster> bestCluster = findBestCluster(object, dims);
+            if(config.calib.find(object) == config.calib.end()) return false;
+            if(config.calib[object].dimensions.size() == 0) return false;
+        }
         samples.clear();
         //pointcloud_pub.publish(pubcloud);
         return true;
     }
-
+    std::list<BestCluster> findBestCluster(std::string object, std::vector<float> dims)
+    {
+        // Combine sampled pointclouds.
+        PointCloud::Ptr out(new PointCloud);
+        std::list<BestCluster> bestCluster;
+        std::list<BestCluster>::iterator it=bestCluster.begin();
+        for(int i = 0 ; i < samples.size(); i++, it++) {
+            bestCluster.push_back(extractClusters(samples[i], object));
+            showMarkers(it, dims);
+            pointcloud_pub.publish(samples[i]);
+            *out += *samples[i];
+            ros::Duration(2).sleep(); 
+        }
+        bestCluster.push_back(extractClusters(out, object));       
+        pointcloud_pub.publish(out);
+    }
     BestCluster extractClusters(PointCloud::Ptr out, std::string object)
     {
         // ------------------------------

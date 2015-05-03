@@ -5,6 +5,7 @@
 #include <apc_vision/SampleVision.h>
 #include <apc_vision/ProcessVision.h>
 #include <geometry_msgs/Pose.h>
+#include <vector>
 
 int main(int argc, char** argv) {
 
@@ -64,12 +65,14 @@ int main(int argc, char** argv) {
     pose4.orientation.w = -0.378845;
 
     apc_vision::APCObject target;
+    std::vector<apc_vision::APCObject> objects;
     apc_vision::DatabaseRetrievalService database;
     database.request.binName = "bin_A";
     ros::service::call("JSONServer", database);
 
     {
         target = database.response.targetObject;
+        objects = database.response.binContents;
 //        std::cout<<target.name;
     }
     std::string bin = "A";
@@ -173,6 +176,7 @@ int main(int argc, char** argv) {
 	
     apc_vision::ProcessVision process;
     process.request.target = target;
+    process.request.objects = objects;
     process.request.bin = bin;
     process.request.camera = apc_vision::ProcessVision::Request::LEFT;
 
