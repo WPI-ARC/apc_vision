@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
     process.request.camera = apc_vision::ProcessVision::Request::LEFT;
 
     ros::service::call("process_vision", process);
-
+	//std::cout << "\nTimeStamp "<<process.response.pose.header.stamp;
     std::cout << "DONE!" << std::endl;
     return 0;
 }

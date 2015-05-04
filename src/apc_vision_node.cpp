@@ -257,11 +257,38 @@ protected:
             if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
             std::vector<float>& limits = config.bin_limits[request.command];
 
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = shelf_frame;
+            marker.header.stamp = ros::Time(0);
+            marker.type = visualization_msgs::Marker::CUBE;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.pose.position.x = (limits[0]+limits[1])/2;
+            marker.pose.position.y = (limits[2]+limits[3])/2;
+            marker.pose.position.z = (limits[4]+limits[5])/2;
+            marker.pose.orientation.x = 0;
+            marker.pose.orientation.y = 0;
+            marker.pose.orientation.z = 0;
+            marker.pose.orientation.w = 1;
+            marker.scale.x = limits[1]-limits[0];
+            marker.scale.y = limits[3]-limits[2];
+            marker.scale.z = limits[5]-limits[4];
+            marker.color.r = 40.0;
+            marker.color.g = 230.0;
+            marker.color.b = 40.0;
+            marker.color.a = 0.7;
+            limits_pub.publish(marker);
+
+            ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
+
+            ROS_INFO("%d points before filtering\n", out->points.size());
+
             filter.setInputCloud(out);
             filter.setFilterFieldName("x");
             filter.setFilterLimits(limits[0], limits[1]);
             //filter.filter(*indices);
             filter.filter(*out);
+
+            ROS_INFO("%d points left after filtering x\n", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -269,6 +296,7 @@ protected:
             filter.setFilterLimits(limits[2], limits[3]);
             //filter.filter(*indices);
             filter.filter(*out);
+            ROS_INFO("%d points left after filtering y\n", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -276,6 +304,7 @@ protected:
             filter.setFilterLimits(limits[4], limits[5]);
             //filter.filter(*indices);
             filter.filter(*out);
+            ROS_INFO("%d points left after filtering z\n", out->points.size());
 
             // ------------------------------------
             // Filter out statistical outliers
@@ -339,14 +368,27 @@ protected:
 
         std::string object = request.target.name;
         std::vector<float> dims = config.calib[object].dimensions;
+
         std::list<BestCluster> bestCluster = findBestCluster(object, dims);
+
         if(config.calib.find(object) == config.calib.end()) return false;
         if(config.calib[object].dimensions.size() == 0) return false;
         
+        for (std::vector<apc_vision::APCObject>::iterator item = request.objects.begin(); item != request.objects.end(); item++) {
+            std::string object = item->name;
+			if(object!=request.target.name)
+			{
+				std::vector<float> dims = config.calib[object].dimensions;
+				findBestCluster(object, dims);
+				if(config.calib.find(object) == config.calib.end()) return false;
+				if(config.calib[object].dimensions.size() == 0) return false;
+			}
+        }
         // Get bestCluster
         std::list<BestCluster>::iterator result = std::min_element(bestCluster.begin(), bestCluster.end(), bestScoreComparison);
         if(bestCluster.end()==result)
         {
+			//ROS_INFO("NO BEST CLUSTERS FOUND");
             return false;
         }
         else
@@ -363,16 +405,22 @@ protected:
             response.pose.pose.orientation.z = quaternion.z();
             response.pose.pose.orientation.w = quaternion.w();
             listener.transformPose(base_frame, response.pose, response.pose);
+
+            response.size.x = dims[0];
+            response.size.y = dims[1];
+            response.size.z = dims[2];
+
+            pcl::PCLPointCloud2 pclpc2;
+            pcl::toPCLPointCloud2(*result->out, pclpc2);
+            pcl_conversions::fromPCL(pclpc2,response.object_points);
+            response.object_points.header.stamp = ros::Time::now();
+            response.object_points.header.frame_id = shelf_frame;
+			pointcloud_pub.publish(result->out);
             pose_pub.publish(response.pose);
+            //ROS_INFO("BEST CLUSTERS FOUND");
             showMarkers(result,dims);
         }
-        for (std::vector<apc_vision::APCObject>::iterator item = request.objects.begin(); item != request.objects.end(); item++) {
-            std::string object = item->name;
-            std::vector<float> dims = config.calib[object].dimensions;
-            std::list<BestCluster> bestCluster = findBestCluster(object, dims);
-            if(config.calib.find(object) == config.calib.end()) return false;
-            if(config.calib[object].dimensions.size() == 0) return false;
-        }
+       
         samples.clear();
         //pointcloud_pub.publish(pubcloud);
         return true;
@@ -386,12 +434,15 @@ protected:
         for(int i = 0 ; i < samples.size(); i++, it++) {
             bestCluster.push_back(extractClusters(samples[i], object));
             showMarkers(it, dims);
+			ROS_INFO("Scores for %*s :%lf ",  object.size(), &object[0], it->score);
             pointcloud_pub.publish(samples[i]);
             *out += *samples[i];
             ros::Duration(2).sleep(); 
         }
-        bestCluster.push_back(extractClusters(out, object));       
+        bestCluster.push_back(extractClusters(out, object)); 
+        ROS_INFO("Scores for %*s :%lf ", object.size(),&object[0],  it->score);
         pointcloud_pub.publish(out);
+		showMarkers(it, dims);
     }
     BestCluster extractClusters(PointCloud::Ptr out, std::string object)
     {
@@ -422,12 +473,14 @@ protected:
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
         {
+            PointCloud::Ptr segment(new PointCloud);
             pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
                 out->points[*pit].r = 0;
                 out->points[*pit].g = 200-i*50;
                 out->points[*pit].b = i*50;
                 indices_->indices.push_back(*pit);
+                segment->points.push_back(out->points[*pit]);
             }
 
             pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
@@ -455,7 +508,7 @@ protected:
                 bestCluster.score = score;
                 bestCluster.rotation = rotation;
                 bestCluster.position = position;
-                bestCluster.out = out;
+                bestCluster.out = segment;
             }
 
             i++;
