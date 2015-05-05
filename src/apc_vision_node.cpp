@@ -216,7 +216,7 @@ protected:
         marker.color.a = 0.7;
         limits_pub.publish(marker);
 
-        ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
+        ROS_INFO("Bin '%s' limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", bin.c_str(), limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
 
         ROS_INFO("%d points before filtering\n", cloud->points.size());
 
@@ -255,6 +255,7 @@ protected:
         //sor.filter (*indices);
         sor.filter(*cloud);
         ROS_INFO("%d points left after SOR filtering\n", cloud->points.size());
+
         return cloud->points.size();
     }
 
@@ -389,7 +390,7 @@ protected:
             return false;
         }
 
-        filter(out, request.bin);
+        if(!filter(out, request.bin)) return false;
         bestCluster.push_back(extractClusters(out, object));
 
         if(config.calib.find(object) == config.calib.end()) return false;
