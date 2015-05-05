@@ -186,6 +186,78 @@ protected:
         lastUVC_right = uv_msg;
     }
 
+    bool filter(PointCloud::Ptr cloud, std::string bin) {
+        // ------------------------------
+        // Filter out bin
+        // ------------------------------
+        pcl::PassThrough<PointT> filter;
+
+        if(config.bin_limits.find(bin) == config.bin_limits.end()) return false;
+        std::vector<float>& limits = config.bin_limits[bin];
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = shelf_frame;
+        marker.header.stamp = ros::Time(0);
+        marker.type = visualization_msgs::Marker::CUBE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position.x = (limits[0]+limits[1])/2;
+        marker.pose.position.y = (limits[2]+limits[3])/2;
+        marker.pose.position.z = (limits[4]+limits[5])/2;
+        marker.pose.orientation.x = 0;
+        marker.pose.orientation.y = 0;
+        marker.pose.orientation.z = 0;
+        marker.pose.orientation.w = 1;
+        marker.scale.x = limits[1]-limits[0];
+        marker.scale.y = limits[3]-limits[2];
+        marker.scale.z = limits[5]-limits[4];
+        marker.color.r = 40.0;
+        marker.color.g = 230.0;
+        marker.color.b = 40.0;
+        marker.color.a = 0.7;
+        limits_pub.publish(marker);
+
+        ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
+
+        ROS_INFO("%d points before filtering\n", cloud->points.size());
+
+        filter.setInputCloud(cloud);
+        filter.setFilterFieldName("x");
+        filter.setFilterLimits(limits[0], limits[1]);
+        //filter.filter(*indices);
+        filter.filter(*cloud);
+
+        ROS_INFO("%d points left after filtering x\n", cloud->points.size());
+
+        filter.setInputCloud(cloud);
+        //filter.setIndices(indices);
+        filter.setFilterFieldName("y");
+        filter.setFilterLimits(limits[2], limits[3]);
+        //filter.filter(*indices);
+        filter.filter(*cloud);
+        ROS_INFO("%d points left after filtering y\n", cloud->points.size());
+
+        filter.setInputCloud(cloud);
+        //filter.setIndices(indices);
+        filter.setFilterFieldName("z");
+        filter.setFilterLimits(limits[4], limits[5]);
+        //filter.filter(*indices);
+        filter.filter(*cloud);
+        ROS_INFO("%d points left after filtering z\n", cloud->points.size());
+
+        // ------------------------------------
+        // Filter out statistical outliers
+        // ------------------------------------
+        pcl::StatisticalOutlierRemoval<PointT> sor;
+        sor.setInputCloud (cloud);
+        //sor.setIndices(indices);
+        sor.setMeanK (50);
+        sor.setStddevMulThresh (1.0);
+        //sor.filter (*indices);
+        sor.filter(*cloud);
+        ROS_INFO("%d points left after SOR filtering\n", cloud->points.size());
+        return cloud->points.size();
+    }
+
     bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
         sensor_msgs::PointCloud2::ConstPtr lastPC;
         sensor_msgs::PointCloud2::ConstPtr lastUVC;
@@ -241,98 +313,11 @@ protected:
             // Transform the pointcloud
             pcl::transformPointCloud(*out, *out, affine);
 
-        
             /*
             Eigen::Vector3d camera_heading = affine * Eigen::Vector3d(0.0, 0.0, 1.0).homogeneous();
             Eigen::Vector3d camera_origin = affine * Eigen::Vector3d(0.0, 0.0, 0.0).homogeneous();
             camera_heading = camera_heading - camera_origin;	
             */
-
-            // ------------------------------
-            // Filter out bin
-            // ------------------------------
-            pcl::PassThrough<PointT> filter;
-            //pcl::IndicesPtr indices(new std::vector<int>);
-
-            if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
-            std::vector<float>& limits = config.bin_limits[request.command];
-
-            visualization_msgs::Marker marker;
-            marker.header.frame_id = shelf_frame;
-            marker.header.stamp = ros::Time(0);
-            marker.type = visualization_msgs::Marker::CUBE;
-            marker.action = visualization_msgs::Marker::ADD;
-            marker.pose.position.x = (limits[0]+limits[1])/2;
-            marker.pose.position.y = (limits[2]+limits[3])/2;
-            marker.pose.position.z = (limits[4]+limits[5])/2;
-            marker.pose.orientation.x = 0;
-            marker.pose.orientation.y = 0;
-            marker.pose.orientation.z = 0;
-            marker.pose.orientation.w = 1;
-            marker.scale.x = limits[1]-limits[0];
-            marker.scale.y = limits[3]-limits[2];
-            marker.scale.z = limits[5]-limits[4];
-            marker.color.r = 40.0;
-            marker.color.g = 230.0;
-            marker.color.b = 40.0;
-            marker.color.a = 0.7;
-            limits_pub.publish(marker);
-
-            ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
-
-            ROS_INFO("%d points before filtering\n", out->points.size());
-
-            filter.setInputCloud(out);
-            filter.setFilterFieldName("x");
-            filter.setFilterLimits(limits[0], limits[1]);
-            //filter.filter(*indices);
-            filter.filter(*out);
-
-            ROS_INFO("%d points left after filtering x\n", out->points.size());
-
-            filter.setInputCloud(out);
-            //filter.setIndices(indices);
-            filter.setFilterFieldName("y");
-            filter.setFilterLimits(limits[2], limits[3]);
-            //filter.filter(*indices);
-            filter.filter(*out);
-            ROS_INFO("%d points left after filtering y\n", out->points.size());
-
-            filter.setInputCloud(out);
-            //filter.setIndices(indices);
-            filter.setFilterFieldName("z");
-            filter.setFilterLimits(limits[4], limits[5]);
-            //filter.filter(*indices);
-            filter.filter(*out);
-            ROS_INFO("%d points left after filtering z\n", out->points.size());
-
-            // ------------------------------------
-            // Filter out statistical outliers
-            // ------------------------------------
-            pcl::StatisticalOutlierRemoval<PointT> sor;
-            sor.setInputCloud (out);
-            //sor.setIndices(indices);
-            sor.setMeanK (50);
-            sor.setStddevMulThresh (1.0);
-            //sor.filter (*indices);
-            sor.filter(*out);
-
-            ROS_INFO("%d points left after SOR filter\n", out->points.size());
-
-            // Use icp to match clouds
-            //if(samples.size() > 0) {
-			if(0){
-                pcl::IterativeClosestPoint<PointT, PointT> icp;
-                icp.setMaximumIterations(50);
-                icp.setInputSource(out);
-                icp.setInputTarget(samples[0]);
-                PointCloud::Ptr p(new PointCloud);
-                icp.align(*p);
-                if(icp.hasConverged()) {
-                    out = p;
-                }
-            }
-			//pointcloud_pub.publish(out);
 
             samples.push_back(out);
 
@@ -366,6 +351,7 @@ protected:
         marker.color.a = 0.7;
         marker_pub.publish(marker);
     }
+
     bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
 
         std::string object = request.target.name;
@@ -376,16 +362,26 @@ protected:
         PointCloud::Ptr out(new PointCloud);
         std::list<BestCluster> bestCluster;
         std::list<BestCluster>::iterator it=bestCluster.begin();
-        for(int i = 0 ; i < samples.size(); i++, it++) {
+        for(int i = 0; i < samples.size(); i++) {
             if(!samples[i]->points.size()) {
                 ROS_WARN("Empty pointcloud from sample %d\n", i);
                 continue;
             }
-            bestCluster.push_back(extractClusters(samples[i], object));
-            showMarkers(it, dims);
-            pointcloud_pub.publish(samples[i]);
+            // Use icp to match clouds
+            if(i > 0) {
+                pcl::IterativeClosestPoint<PointT, PointT> icp;
+                icp.setMaximumIterations(50);
+                icp.setInputSource(samples[i]);
+                icp.setInputTarget(samples[0]);
+                icp.align(*out);
+
+                if(icp.hasConverged()) {
+                    ROS_INFO("ICP converged\n");
+                }
+            }
+
             *out += *samples[i];
-            ros::Duration(2).sleep(); 
+            //ros::Duration(2).sleep(); 
         }
 
         if(!out->points.size()) {
@@ -393,6 +389,7 @@ protected:
             return false;
         }
 
+        filter(out, request.bin);
         bestCluster.push_back(extractClusters(out, object));
 
         if(config.calib.find(object) == config.calib.end()) return false;
