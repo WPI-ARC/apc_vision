@@ -389,7 +389,7 @@ protected:
         }
 
         if(!out->points.size()) {
-            ROS_ERROR("Empty combinded pointcloud\n");
+            ROS_ERROR("Empty combined pointcloud\n");
             return false;
         }
 
