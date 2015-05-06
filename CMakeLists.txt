@@ -118,10 +118,10 @@ include_directories(
 add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
 add_dependencies(apc_vision_node ${PROJECT_NAME}_gencpp)
 
-add_executable(three_pose_capture src/three_pose_capture.cpp)
-add_dependencies(
-    three_pose_capture ${PROJECT_NAME}_gencpp
-    motoman_moveit_gencpp)
+# add_executable(three_pose_capture src/three_pose_capture.cpp)
+# add_dependencies(
+#     three_pose_capture ${PROJECT_NAME}_gencpp
+#     motoman_moveit_gencpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -134,9 +134,9 @@ target_link_libraries(apc_vision_node
   ${PCL_LIBRARIES}
 )
 
-target_link_libraries(three_pose_capture
-  ${catkin_LIBRARIES}
-)
+# target_link_libraries(three_pose_capture
+#   ${catkin_LIBRARIES}
+# )
 
 #############
 ## Install ##
