@@ -100,8 +100,8 @@ std::string id_to_string(uint64_t id) {
         return std::string("kyjen_squeakin_eggs_plush_puppies");
     case KONG_SITTING_FROG_DOG_TOY:
         return std::string("kong_sitting_frog_dog_toy");
-    case KON_AIR_DOG_SQUEAKAIR_TENNIS_BALL:
-        return std::string("kon_air_dog_squeakair_tennis_ball");
+    case KONG_AIR_DOG_SQUEAKAIR_TENNIS_BALL:
+        return std::string("kong_air_dog_squeakair_tennis_ball");
     case DR_BROWNS_BOTTLE_BRUSH:
         return std::string("dr_browns_bottle_brush");
     case KONG_DUCK_DOG_TOY:
