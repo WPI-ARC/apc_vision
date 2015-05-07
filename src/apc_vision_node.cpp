@@ -271,28 +271,30 @@ protected:
             if(feature_matcher != objDetectors.end()) {
                 cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(lastImage, sensor_msgs::image_encodings::BGR8);
                 cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(lastIndexImage, sensor_msgs::image_encodings::TYPE_32SC1);
-                std::vector<cv::Point2f> obj_corners;
-                float score = feature_matcher->second.detect(img_ptr->image, obj_corners);
+                std::vector<std::vector<cv::Point2f> > obj_bounds;
+                float score = feature_matcher->second.detect(img_ptr->image, obj_bounds);
                 ROS_INFO("Score %f for object `%s'", score, request.command.c_str());
 
-                int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
-                for(int i = 0; i < obj_corners.size(); ++i) {
-                    min_x = std::min(min_x, (int)obj_corners[i].x);
-                    max_x = std::min(max_x, (int)obj_corners[i].x);
-                    min_y = std::min(min_y, (int)obj_corners[i].y);
-                    max_y = std::min(max_y, (int)obj_corners[i].y);
-                }
+                for(int obj = 0; obj < obj_bounds.size(); ++obj) {
+                    int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
+                    for(int i = 0; i < obj_bounds[obj].size(); ++i) {
+                        min_x = std::min(min_x, (int)obj_bounds[obj][i].x);
+                        max_x = std::min(max_x, (int)obj_bounds[obj][i].x);
+                        min_y = std::min(min_y, (int)obj_bounds[obj][i].y);
+                        max_y = std::min(max_y, (int)obj_bounds[obj][i].y);
+                    }
 
-                for(int j = min_y; j <= max_y; ++j) {
-                    for(int i = min_x; j <= max_x; ++i) {
-                        // if point in quadrilateral TODO: Fix this check
-                        if(true) {
-                            int32_t index = ind_ptr->image.at<int32_t>(j,i);
-                            if(index >= 0) {
-                                out->points[index].id = string_to_id(request.command);
-                                out->points[index].r = 0;
-                                out->points[index].g = 0;
-                                out->points[index].b = 255;
+                    for(int j = min_y; j <= max_y; ++j) {
+                        for(int i = min_x; j <= max_x; ++i) {
+                            // if point in quadrilateral TODO: Fix this check
+                            if(true) {
+                                int32_t index = ind_ptr->image.at<int32_t>(j,i);
+                                if(index >= 0) {
+                                    out->points[index].id = string_to_id(request.command);
+                                    out->points[index].r = 0;
+                                    out->points[index].g = 0;
+                                    out->points[index].b = 255;
+                                }
                             }
                         }
                     }
