@@ -268,7 +268,9 @@ protected:
             pcl::transformPointCloud(*out, *out, affine);
 
             std::map<std::string, ObjectRecognizer>::iterator feature_matcher = objDetectors.find(request.command);
-            if(feature_matcher != objDetectors.end()) {
+            if(feature_matcher == objDetectors.end()) {
+                ROS_INFO("No feature matcher for object `%s'", request.command.c_str());
+            } else {
                 cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(lastImage, sensor_msgs::image_encodings::BGR8);
                 cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(lastIndexImage, sensor_msgs::image_encodings::TYPE_32SC1);
                 std::vector<std::vector<cv::Point2f> > obj_bounds;
