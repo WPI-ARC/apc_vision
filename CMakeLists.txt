@@ -115,7 +115,7 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
+add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp src/ObjectIDs.cpp)
 add_dependencies(apc_vision_node ${PROJECT_NAME}_gencpp)
 
 # add_executable(three_pose_capture src/three_pose_capture.cpp)

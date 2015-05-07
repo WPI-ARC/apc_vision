@@ -46,7 +46,7 @@ ObjectRecognizer::ObjectRecognizer(std::vector<std::string> calib_image_names) {
     }
 }
 
-float ObjectRecognizer::detect(cv::Mat color) {
+float ObjectRecognizer::detect(cv::Mat color, std::vector<cv::Point2f>& obj_corners) {
     float score = 0;
     cv::Mat_<unsigned char> img(color.size());
 
@@ -111,7 +111,7 @@ float ObjectRecognizer::detect(cv::Mat color) {
             // Find homography from the calibration image to the current frame.
             cv::Mat H = cv::findHomography( obj, scene, CV_RANSAC );
             // Get the corners from the image_1 ( the object to be "detected" )
-            std::vector<cv::Point2f> obj_corners(4);
+            obj_corners.reserve(4);
             obj_corners[0] = cvPoint(0,0);
             obj_corners[1] = cvPoint(obj_imgs[o].cols, 0 );
             obj_corners[2] = cvPoint(obj_imgs[o].cols, obj_imgs[o].rows );

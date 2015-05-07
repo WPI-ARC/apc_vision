@@ -1,3 +1,4 @@
+#define PCL_NO_PRECOMPILE
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <tf/tf.h>
@@ -18,6 +19,9 @@
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
+
+#include "PointXYZRGB_ID.h"
+#include "ObjectIDs.h"
 
 #include <std_msgs/Header.h>
 #include <image_transport/image_transport.h>
@@ -60,16 +64,18 @@ bool close_to(float x, float y, float tolerance_lower, float tolerance_upper) {
     return (x >= y-tolerance_lower) && (x <= y+tolerance_upper);
 }
 
-typedef pcl::PointXYZRGB PointT;
+typedef PointXYZRGB_ID PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
 typedef pcl::PointCloud<pcl::PointUV> UVCloud;
 
 const static std::string right_xyz_topic = "/camera_right/points_xyzrgb";
 const static std::string right_uv_topic = "/camera_right/points_uv";
 const static std::string right_image_topic = "/camera_right/color";
+const static std::string right_index_image_topic = "/camera_right/depth_indices";
 const static std::string left_xyz_topic = "/camera_left/points_xyzrgb";
 const static std::string left_uv_topic = "/camera_left/points_uv";
 const static std::string left_image_topic = "/camera_left/color";
+const static std::string left_index_image_topic = "/camera_left/depth_indices";
 const static std::string out_topic = "/object_segmentation/points_xyz";
 const static std::string pose_topic = "/object_segmentation/pose";
 const static std::string marker_topic = "/object_segmentation/bounding_boxes";
@@ -114,6 +120,8 @@ public:
         uv_sub_right(nh, right_uv_topic, 1),
         left_image_sub(nh.subscribe(left_image_topic, 1, &VisionProcessor::left_image_cb, this)),
         right_image_sub(nh.subscribe(right_image_topic, 1, &VisionProcessor::right_image_cb, this)),
+        left_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::left_index_image_cb, this)),
+        right_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::right_index_image_cb, this)),
         left_sync(pointcloud_sub_left, uv_sub_left, 10),
         right_sync(pointcloud_sub_right, uv_sub_right, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
@@ -141,6 +149,8 @@ protected:
 
     ros::Subscriber left_image_sub;
     ros::Subscriber right_image_sub;
+    ros::Subscriber left_index_image_sub;
+    ros::Subscriber right_index_image_sub;
 
     message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> left_sync;
     message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> right_sync;
@@ -156,6 +166,8 @@ protected:
 
     sensor_msgs::ImageConstPtr lastImage_left;
     sensor_msgs::ImageConstPtr lastImage_right;
+    sensor_msgs::ImageConstPtr lastIndexImage_left;
+    sensor_msgs::ImageConstPtr lastIndexImage_right;
 
     Config config;
     std::map<std::string, ObjectRecognizer> objDetectors;
@@ -175,6 +187,14 @@ protected:
         lastImage_right = img;
     }
 
+    void left_index_image_cb(const sensor_msgs::ImageConstPtr& img) {
+        lastIndexImage_left = img;
+    }
+
+    void right_index_image_cb(const sensor_msgs::ImageConstPtr& img) {
+        lastIndexImage_right = img;
+    }
+
     void process_left(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
                  const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
         lastPC_left = pc_msg;
@@ -189,15 +209,21 @@ protected:
     bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
         sensor_msgs::PointCloud2::ConstPtr lastPC;
         sensor_msgs::PointCloud2::ConstPtr lastUVC;
+        sensor_msgs::ImageConstPtr lastImage;
+        sensor_msgs::ImageConstPtr lastIndexImage;
         std::string camera_frame;
 
         if(request.camera == SampleVision::Request::LEFT) {
             lastPC = lastPC_left;
             lastUVC = lastUVC_left;
+            lastImage = lastImage_left;
+            lastIndexImage = lastIndexImage_left;
             camera_frame = left_camera_frame;
         } else {
             lastPC = lastPC_right;
             lastUVC = lastUVC_right;
+            lastImage = lastImage_right;
+            lastIndexImage = lastIndexImage_right;
             camera_frame = right_camera_frame;
         }
 
@@ -241,11 +267,42 @@ protected:
             // Transform the pointcloud
             pcl::transformPointCloud(*out, *out, affine);
 
-        
+            std::map<std::string, ObjectRecognizer>::iterator feature_matcher = objDetectors.find(request.command);
+            if(feature_matcher != objDetectors.end()) {
+                cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(lastImage, sensor_msgs::image_encodings::BGR8);
+                cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(lastIndexImage, sensor_msgs::image_encodings::TYPE_32SC1);
+                std::vector<cv::Point2f> obj_corners;
+                float score = feature_matcher->second.detect(img_ptr->image, obj_corners);
+                ROS_INFO("Score %f for object `%s'", score, request.command.c_str());
+
+                int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
+                for(int i = 0; i < obj_corners.size(); ++i) {
+                    min_x = std::min(min_x, (int)obj_corners[i].x);
+                    max_x = std::min(max_x, (int)obj_corners[i].x);
+                    min_y = std::min(min_y, (int)obj_corners[i].y);
+                    max_y = std::min(max_y, (int)obj_corners[i].y);
+                }
+
+                for(int j = min_y; j <= max_y; ++j) {
+                    for(int i = min_x; j <= max_x; ++i) {
+                        // if point in quadrilateral TODO: Fix this check
+                        if(true) {
+                            int32_t index = ind_ptr->image.at<int32_t>(j,i);
+                            if(index >= 0) {
+                                out->points[index].id = string_to_id(request.command);
+                                out->points[index].r = 0;
+                                out->points[index].g = 0;
+                                out->points[index].b = 255;
+                            }
+                        }
+                    }
+                }
+            }
+
             /*
             Eigen::Vector3d camera_heading = affine * Eigen::Vector3d(0.0, 0.0, 1.0).homogeneous();
             Eigen::Vector3d camera_origin = affine * Eigen::Vector3d(0.0, 0.0, 0.0).homogeneous();
-            camera_heading = camera_heading - camera_origin;	
+            camera_heading = camera_heading - camera_origin;
             */
 
             // ------------------------------
@@ -280,7 +337,7 @@ protected:
 
             ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
 
-            ROS_INFO("%d points before filtering\n", out->points.size());
+            ROS_INFO("%lu points before filtering\n", out->points.size());
 
             filter.setInputCloud(out);
             filter.setFilterFieldName("x");
@@ -288,7 +345,7 @@ protected:
             //filter.filter(*indices);
             filter.filter(*out);
 
-            ROS_INFO("%d points left after filtering x\n", out->points.size());
+            ROS_INFO("%lu points left after filtering x\n", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -296,7 +353,7 @@ protected:
             filter.setFilterLimits(limits[2], limits[3]);
             //filter.filter(*indices);
             filter.filter(*out);
-            ROS_INFO("%d points left after filtering y\n", out->points.size());
+            ROS_INFO("%lu points left after filtering y\n", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -304,7 +361,7 @@ protected:
             filter.setFilterLimits(limits[4], limits[5]);
             //filter.filter(*indices);
             filter.filter(*out);
-            ROS_INFO("%d points left after filtering z\n", out->points.size());
+            ROS_INFO("%lu points left after filtering z\n", out->points.size());
 
             // ------------------------------------
             // Filter out statistical outliers
@@ -317,7 +374,7 @@ protected:
             //sor.filter (*indices);
             sor.filter(*out);
 
-            ROS_INFO("%d points left after SOR filter\n", out->points.size());
+            ROS_INFO("%lu points left after SOR filter\n", out->points.size());
 
             // Use icp to match clouds
             //if(samples.size() > 0) {
@@ -478,9 +535,9 @@ protected:
             PointCloud::Ptr segment(new PointCloud);
             pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
-                out->points[*pit].r = 0;
-                out->points[*pit].g = 200-i*50;
-                out->points[*pit].b = i*50;
+                //out->points[*pit].r = 0;
+                //out->points[*pit].g = 200-i*50;
+                //out->points[*pit].b = i*50;
                 indices_->indices.push_back(*pit);
                 segment->points.push_back(out->points[*pit]);
             }

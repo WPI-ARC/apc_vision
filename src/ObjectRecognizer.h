@@ -22,5 +22,5 @@ private:
 public:
     ObjectRecognizer();
     ObjectRecognizer(std::vector<std::string> calib_image_names);
-    float detect(cv::Mat img);
+    float detect(cv::Mat img, std::vector<cv::Point2f>& obj_corners);
 };
