@@ -129,7 +129,7 @@ public:
         uv_sub_right(nh, right_uv_topic, 1),
         left_image_sub(nh.subscribe(left_image_topic, 1, &VisionProcessor::left_image_cb, this)),
         right_image_sub(nh.subscribe(right_image_topic, 1, &VisionProcessor::right_image_cb, this)),
-        left_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::left_index_image_cb, this)),
+        left_index_image_sub(nh.subscribe(left_index_image_topic, 1, &VisionProcessor::left_index_image_cb, this)),
         right_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::right_index_image_cb, this)),
         left_sync(pointcloud_sub_left, uv_sub_left, 10),
         right_sync(pointcloud_sub_right, uv_sub_right, 10),
@@ -312,9 +312,9 @@ protected:
             marker.color.a = 0.7;
             limits_pub.publish(marker);
 
-            ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
+            ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
 
-            ROS_INFO("%zu points before filtering\n", out->points.size());
+            ROS_INFO("%zu points before filtering", out->points.size());
 
             filter.setInputCloud(out);
             filter.setFilterFieldName("x");
@@ -322,7 +322,7 @@ protected:
             //filter.filter(*indices);
             filter.filter(*out);
 
-            ROS_INFO("%zu points left after filtering x\n", out->points.size());
+            ROS_INFO("%zu points left after filtering x", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -330,7 +330,7 @@ protected:
             filter.setFilterLimits(limits[2], limits[3]);
             //filter.filter(*indices);
             filter.filter(*out);
-            ROS_INFO("%zu points left after filtering y\n", out->points.size());
+            ROS_INFO("%zu points left after filtering y", out->points.size());
 
             filter.setInputCloud(out);
             //filter.setIndices(indices);
@@ -338,7 +338,7 @@ protected:
             filter.setFilterLimits(limits[4], limits[5]);
             //filter.filter(*indices);
             filter.filter(*out);
-            ROS_INFO("%zu points left after filtering z\n", out->points.size());
+            ROS_INFO("%zu points left after filtering z", out->points.size());
 
             // ------------------------------------
             // Filter out statistical outliers
@@ -351,7 +351,7 @@ protected:
             //sor.filter (*indices);
             sor.filter(*out);
 
-            ROS_INFO("%zu points left after SOR filter\n", out->points.size());
+            ROS_INFO("%zu points left after SOR filter", out->points.size());
 
             // Use icp to match clouds
             //if(samples.size() > 0) {
@@ -425,27 +425,45 @@ protected:
             if(feature_matcher == objDetectors.end()) {
                 ROS_INFO("No feature matcher for object `%s'", request.target.name.c_str());
             } else {
+                ROS_DEBUG("Converting rgb image to OpenCV for object `%s'", request.target.name.c_str());
                 cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(samples[i].image, sensor_msgs::image_encodings::BGR8);
+                ROS_DEBUG("Converting index image to OpenCV for object `%s'", request.target.name.c_str());
                 cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(samples[i].indices, sensor_msgs::image_encodings::TYPE_32SC1);
+                ROS_DEBUG("Feature matching for object `%s'", request.target.name.c_str());
                 std::vector<std::vector<cv::Point2f> > obj_bounds;
                 float score = feature_matcher->second.detect(img_ptr->image, obj_bounds);
                 ROS_INFO("Score %f for object `%s'", score, request.target.name.c_str());
+
+                ROS_INFO("Image size (%d,%d), indices size (%d,%d)", img_ptr->image.size().width, img_ptr->image.size().height, ind_ptr->image.size().width, ind_ptr->image.size().height);
+                ROS_INFO("Object matches found: %zd", obj_bounds.size());
 
                 for(int obj = 0; obj < obj_bounds.size(); ++obj) {
                     int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
                     for(int p = 0; p < obj_bounds[obj].size(); ++p) {
                         min_x = std::min(min_x, (int)obj_bounds[obj][p].x);
-                        max_x = std::min(max_x, (int)obj_bounds[obj][p].x);
+                        max_x = std::max(max_x, (int)obj_bounds[obj][p].x);
                         min_y = std::min(min_y, (int)obj_bounds[obj][p].y);
-                        max_y = std::min(max_y, (int)obj_bounds[obj][p].y);
+                        max_y = std::max(max_y, (int)obj_bounds[obj][p].y);
                     }
+
+                    min_x = (min_x * ind_ptr->image.size().width) / img_ptr->image.size().width;
+                    max_x = (max_x * ind_ptr->image.size().width) / img_ptr->image.size().width;
+                    min_y = (min_y * ind_ptr->image.size().height) / img_ptr->image.size().height;
+                    max_y = (max_y * ind_ptr->image.size().height) / img_ptr->image.size().height;
+
+                    min_x = std::min(std::max(min_x, 0), ind_ptr->image.size().width-1);
+                    max_x = std::min(std::max(max_x, 0), ind_ptr->image.size().width-1);
+                    min_y = std::min(std::max(min_y, 0), ind_ptr->image.size().height-1);
+                    max_y = std::min(std::max(max_y, 0), ind_ptr->image.size().height-1);
+
+                    ROS_INFO("Iterating from (%d,%d) to (%d,%d)", min_y, min_x, max_y, max_x);
 
                     for(int y = min_y; y <= max_y; ++y) {
                         for(int x = min_x; y <= max_x; ++x) {
-                            // xf poxnt xn quadrxlateral TODO: Fxx thxs check
+                            // if point in quadrilateral TODO: Fix this check
                             if(true) {
                                 int32_t index = ind_ptr->image.at<int32_t>(y,x);
-                                if(index >= 0) {
+                                if(index >= 0 && index < samples[i].cloud->points.size()) {
                                     samples[i].cloud->points[index].id = string_to_id(request.target.name);
                                     samples[i].cloud->points[index].r = 0;
                                     samples[i].cloud->points[index].g = 0;
