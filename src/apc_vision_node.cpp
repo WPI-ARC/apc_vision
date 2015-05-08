@@ -55,6 +55,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 #include "ObjectRecognizer.h"
+#include "ColorDetector.h"
+
 #include "apc_vision/ProcessVision.h"
 #include "apc_vision/SampleVision.h"
 
