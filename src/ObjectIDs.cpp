@@ -43,8 +43,8 @@ uint64_t string_to_id(std::string str) {
         return KYJEN_SQUEAKIN_EGGS_PLUSH_PUPPIES;
     } else if(str == "kong_sitting_frog_dog_toy") {
         return KONG_SITTING_FROG_DOG_TOY;
-    } else if(str == "kon_air_dog_squeakair_tennis_ball") {
-        return KON_AIR_DOG_SQUEAKAIR_TENNIS_BALL;
+    } else if(str == "kong_air_dog_squeakair_tennis_ball") {
+        return KONG_AIR_DOG_SQUEAKAIR_TENNIS_BALL;
     } else if(str == "dr_browns_bottle_brush") {
         return DR_BROWNS_BOTTLE_BRUSH;
     } else if(str == "kong_duck_dog_toy") {

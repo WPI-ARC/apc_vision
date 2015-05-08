@@ -6,6 +6,7 @@ APCObject[] objects
 string bin
 int32 camera
 ---
+bool valid
 geometry_msgs/PoseStamped pose
 geometry_msgs/Vector3 size
 sensor_msgs/PointCloud2 object_points

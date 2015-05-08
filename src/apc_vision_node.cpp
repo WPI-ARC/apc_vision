@@ -129,10 +129,10 @@ public:
         uv_sub_right(nh, right_uv_topic, 1),
         left_image_sub(nh.subscribe(left_image_topic, 1, &VisionProcessor::left_image_cb, this)),
         right_image_sub(nh.subscribe(right_image_topic, 1, &VisionProcessor::right_image_cb, this)),
-        left_index_image_sub(nh.subscribe(left_index_image_topic, 1, &VisionProcessor::left_index_image_cb, this)),
-        right_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::right_index_image_cb, this)),
-        left_sync(pointcloud_sub_left, uv_sub_left, 10),
-        right_sync(pointcloud_sub_right, uv_sub_right, 10),
+        left_index_image_sub(nh, left_index_image_topic, 1),
+        right_index_image_sub(nh, right_index_image_topic, 1),
+        left_sync(pointcloud_sub_left, uv_sub_left, left_index_image_sub, 10),
+        right_sync(pointcloud_sub_right, uv_sub_right, right_index_image_sub, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
         pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
         sample_server(nh.advertiseService("sample_vision", &VisionProcessor::sample_cb, this)),
@@ -141,8 +141,8 @@ public:
         marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1)),
         limits_pub(nh.advertise<visualization_msgs::Marker>(limits_topic, 1))
     {
-        left_sync.registerCallback(boost::bind(&VisionProcessor::process_left, this, _1, _2));
-        right_sync.registerCallback(boost::bind(&VisionProcessor::process_right, this, _1, _2));
+        left_sync.registerCallback(boost::bind(&VisionProcessor::process_left, this, _1, _2, _3));
+        right_sync.registerCallback(boost::bind(&VisionProcessor::process_right, this, _1, _2, _3));
 
         for(Config::CalibMap::iterator it = config.calib.begin(); it != config.calib.end(); it++) {
             objDetectors[it->first] = ObjectRecognizer(it->second.calibFiles);
@@ -158,11 +158,16 @@ protected:
 
     ros::Subscriber left_image_sub;
     ros::Subscriber right_image_sub;
-    ros::Subscriber left_index_image_sub;
-    ros::Subscriber right_index_image_sub;
+    message_filters::Subscriber<sensor_msgs::Image> left_index_image_sub;
+    message_filters::Subscriber<sensor_msgs::Image> right_index_image_sub;
 
-    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> left_sync;
-    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> right_sync;
+    message_filters::TimeSynchronizer<
+        sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::Image
+    > left_sync;
+
+    message_filters::TimeSynchronizer<
+        sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::Image
+    > right_sync;
 
     ros::Publisher pointcloud_pub;
     ros::Publisher pose_pub;
@@ -188,31 +193,32 @@ protected:
 
     std::vector<Sample> samples;
 
-    void left_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastImage_left = img;
+    void left_image_cb(const sensor_msgs::ImageConstPtr& image) {
+        lastImage_left = image;
     }
 
-    void right_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastImage_right = img;
+    void right_image_cb(const sensor_msgs::ImageConstPtr& image) {
+        lastImage_right = image;
     }
 
-    void left_index_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastIndexImage_left = img;
-    }
-
-    void right_index_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastIndexImage_right = img;
-    }
-
-    void process_left(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
-                 const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
+    void process_left(
+        const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
+        const sensor_msgs::PointCloud2::ConstPtr& uv_msg, 
+        const sensor_msgs::ImageConstPtr& index_image) 
+    {
         lastPC_left = pc_msg;
         lastUVC_left = uv_msg;
+        lastIndexImage_left = index_image;
     }
 
-    void process_right(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
+    void process_right(
+        const sensor_msgs::PointCloud2::ConstPtr& pc_msg,
+        const sensor_msgs::PointCloud2::ConstPtr& uv_msg,
+        const sensor_msgs::ImageConstPtr& index_image) 
+    {
         lastPC_right = pc_msg;
         lastUVC_right = uv_msg;
+        lastIndexImage_right = index_image;
     }
 
     bool filter(PointCloud::Ptr cloud, std::string bin) {
@@ -297,6 +303,8 @@ protected:
     }
 
     bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
+        response.success = false;
+
         sensor_msgs::PointCloud2::ConstPtr lastPC;
         sensor_msgs::PointCloud2::ConstPtr lastUVC;
         sensor_msgs::ImageConstPtr lastImage;
@@ -318,8 +326,14 @@ protected:
         }
 
         if(request.command != "reset") {
-            if(!lastPC.get()) return false;
-            if(!lastUVC.get()) return false;
+            if(!lastPC.get()) {
+                ROS_ERROR("No pointclouds have been recieved!");
+                return true;
+            }
+            if(!lastUVC.get()) {
+                ROS_ERROR("No UV pointclouds have been recieved!");
+                return true;
+            }
 
             pcl::PCLPointCloud2 uv_pc2, pc_pc2;
 
@@ -347,8 +361,8 @@ protected:
             bool success = listener.waitForTransform(shelf_frame, camera_frame, stamp, ros::Duration(2.0));
             // If transform isn't found in that time, give up
             if(!success) {
-                std::cerr << "Couldn't lookup transform!" << std::endl;
-                return false;
+                ROS_ERROR("Couldn't look up camera to shelf transform!");
+                return true;
             }
             // Otherwise, get the transform
             listener.lookupTransform(shelf_frame, camera_frame, stamp, transform);
@@ -370,8 +384,11 @@ protected:
 
             samples.push_back(sample);
 
+            response.success = true;
+
             return true;
         } else {
+            response.success = true;
             samples.clear();
             return true;
         }
@@ -402,6 +419,7 @@ protected:
     }
 
     bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
+        response.valid = false;
 
         std::string object = request.target.name;
         std::vector<float> dims = config.calib[object].dimensions;
@@ -430,8 +448,8 @@ protected:
                 float score = feature_matcher->second.detect(img_ptr->image, obj_bounds);
                 ROS_INFO("Score %f for object `%s'", score, request.target.name.c_str());
 
-                ROS_INFO("Image size (%d,%d), indices size (%d,%d)", img_ptr->image.size().width, img_ptr->image.size().height, ind_ptr->image.size().width, ind_ptr->image.size().height);
-                ROS_INFO("Object matches found: %zd", obj_bounds.size());
+                ROS_DEBUG("Image size (%d,%d), indices size (%d,%d)", img_ptr->image.size().width, img_ptr->image.size().height, ind_ptr->image.size().width, ind_ptr->image.size().height);
+                ROS_DEBUG("Object matches found: %zd", obj_bounds.size());
 
                 for(int obj = 0; obj < obj_bounds.size(); ++obj) {
                     int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
@@ -452,9 +470,6 @@ protected:
                     min_y = std::min(std::max(min_y, 0), ind_ptr->image.size().height-1);
                     max_y = std::min(std::max(max_y, 0), ind_ptr->image.size().height-1);
 
-                    ROS_INFO("Iterating from (%d,%d) to (%d,%d)", min_y, min_x, max_y, max_x);
-
-                    ROS_INFO("Pointcloud size: %zd", samples[i].cloud->points.size());
                     for(int y = min_y; y <= max_y; ++y) {
                         for(int x = min_x; x <= max_x; ++x) {
                             // if point in quadrilateral TODO: Fix this check
@@ -490,22 +505,24 @@ protected:
 
         if(!out->points.size()) {
             ROS_ERROR("Empty combined pointcloud\n");
-            return false;
+            return true;
         }
 
         if(!filter(out, request.bin)) {
-            return false;
+            ROS_ERROR("Empty filtered pointcloud");
+            return true;
         }
+
         bestCluster.push_back(extractClusters(out, object));
 
         if(config.calib.find(object) == config.calib.end()) {
             ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
-            return false;
+            return true;
         }
 
         if(config.calib[object].dimensions.size() == 0) {
             ROS_ERROR("Object dimensions nonexistent for object `%s'", object.c_str());
-            return false;
+            return true;
         }
 
         // Get bestCluster
@@ -513,7 +530,7 @@ protected:
         if(bestCluster.end()==result)
         {
             ROS_ERROR("Could not find best cluster");
-            return false;
+            return true;
         }
         else
         {
@@ -532,8 +549,8 @@ protected:
             bool success = listener.waitForTransform(shelf_frame, base_frame, stamp, ros::Duration(2.0));
             // If transform isn't found in that time, give up
             if(!success) {
-                ROS_WARN("Couldn't lookup transform from shelf to base_link!");
-                return false;
+                ROS_ERROR("Couldn't lookup transform from shelf to base_link!");
+                return true;
             }
             listener.transformPose(base_frame, response.pose, response.pose);
 
@@ -660,8 +677,14 @@ protected:
 
         //float dot_threshold = 0.93;
 
-        if(config.calib.find(object) == config.calib.end()) return false;
-        if(config.calib[object].dimensions.size() == 0) return false;
+        if(config.calib.find(object) == config.calib.end()) {
+            ROS_ERROR("Could not find object calibration info for object `%s'", object.c_str());
+            return false;
+        }
+        if(config.calib[object].dimensions.size() == 0) {
+            ROS_ERROR("Object dimensions nonexistent for object `%s'", object.c_str());
+            return false;
+        }
 
         std::vector<float>& known_dims = config.calib[object].dimensions;
         std::vector<float> new_dims = known_dims;
