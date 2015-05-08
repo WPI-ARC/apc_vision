@@ -221,7 +221,10 @@ protected:
         // ------------------------------
         pcl::PassThrough<PointT> filter;
 
-        if(config.bin_limits.find(bin) == config.bin_limits.end()) return false;
+        if(config.bin_limits.find(bin) == config.bin_limits.end()) {
+            ROS_ERROR("Could not find bin limits for bin `%s'", bin.c_str());
+            return false;
+        }
         std::vector<float>& limits = config.bin_limits[bin];
 
         visualization_msgs::Marker marker;
@@ -285,7 +288,12 @@ protected:
         sor.filter(*cloud);
         ROS_INFO("%d points left after SOR filtering\n", cloud->points.size());
 
-        return cloud->points.size();
+        if(!cloud->points.size()) {
+            ROS_ERROR("Empty filtered point cloud!");
+            return false;
+        }
+        
+        return true;
     }
 
     bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
@@ -448,7 +456,7 @@ protected:
 
                     ROS_INFO("Pointcloud size: %zd", samples[i].cloud->points.size());
                     for(int y = min_y; y <= max_y; ++y) {
-                        for(int x = min_x; y <= max_x; ++x) {
+                        for(int x = min_x; x <= max_x; ++x) {
                             // if point in quadrilateral TODO: Fix this check
                             if(true) {
                                 int32_t index = ind_ptr->image.at<int32_t>(y,x);
@@ -485,16 +493,26 @@ protected:
             return false;
         }
 
-        if(!filter(out, request.bin)) return false;
+        if(!filter(out, request.bin)) {
+            return false;
+        }
         bestCluster.push_back(extractClusters(out, object));
 
-        if(config.calib.find(object) == config.calib.end()) return false;
-        if(config.calib[object].dimensions.size() == 0) return false;
+        if(config.calib.find(object) == config.calib.end()) {
+            ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
+            return false;
+        }
+
+        if(config.calib[object].dimensions.size() == 0) {
+            ROS_ERROR("Object dimensions nonexistent for object `%s'", object.c_str());
+            return false;
+        }
 
         // Get bestCluster
         std::list<BestCluster>::iterator result = std::min_element(bestCluster.begin(), bestCluster.end(), bestScoreComparison);
         if(bestCluster.end()==result)
         {
+            ROS_ERROR("Could not find best cluster");
             return false;
         }
         else
