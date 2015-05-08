@@ -55,6 +55,7 @@ find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation
 add_message_files(
   FILES
   APCObject.msg
+  Sample.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -118,6 +119,9 @@ include_directories(
 add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp)
 add_dependencies(apc_vision_node ${PROJECT_NAME}_gencpp)
 
+add_executable(scanner_node src/scanner_node.cpp)
+add_dependencies(scanner_node ${PROJECT_NAME}_gencpp)
+
 # add_executable(three_pose_capture src/three_pose_capture.cpp)
 # add_dependencies(
 #     three_pose_capture ${PROJECT_NAME}_gencpp
@@ -134,6 +138,11 @@ target_link_libraries(apc_vision_node
   ${PCL_LIBRARIES}
 )
 
+target_link_libraries(scanner_node
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
 # target_link_libraries(three_pose_capture
 #   ${catkin_LIBRARIES}
 # )
