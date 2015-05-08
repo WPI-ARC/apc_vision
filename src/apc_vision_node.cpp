@@ -442,7 +442,7 @@ protected:
                 ROS_DEBUG("Converting rgb image to OpenCV for object `%s'", request.target.name.c_str());
                 cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(samples[i].image, sensor_msgs::image_encodings::BGR8);
                 ROS_DEBUG("Converting index image to OpenCV for object `%s'", request.target.name.c_str());
-                cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(samples[i].indices, sensor_msgs::image_encodings::TYPE_32SC1);
+                cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(samples[i].indices, sensor_msgs::image_encodings::TYPE_32SC2);
                 ROS_DEBUG("Feature matching for object `%s'", request.target.name.c_str());
                 std::vector<std::vector<cv::Point2f> > obj_bounds;
                 float score = feature_matcher->second.detect(img_ptr->image, obj_bounds);
@@ -454,36 +454,48 @@ protected:
                 for(int obj = 0; obj < obj_bounds.size(); ++obj) {
                     int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
                     for(int p = 0; p < obj_bounds[obj].size(); ++p) {
+                        ROS_INFO("Point (%f, %f)", obj_bounds[obj][p].x, obj_bounds[obj][p].y);
                         min_x = std::min(min_x, (int)obj_bounds[obj][p].x);
                         max_x = std::max(max_x, (int)obj_bounds[obj][p].x);
                         min_y = std::min(min_y, (int)obj_bounds[obj][p].y);
                         max_y = std::max(max_y, (int)obj_bounds[obj][p].y);
                     }
 
+                    ROS_INFO("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
+
                     min_x = (min_x * ind_ptr->image.size().width) / img_ptr->image.size().width;
                     max_x = (max_x * ind_ptr->image.size().width) / img_ptr->image.size().width;
                     min_y = (min_y * ind_ptr->image.size().height) / img_ptr->image.size().height;
                     max_y = (max_y * ind_ptr->image.size().height) / img_ptr->image.size().height;
+
+                    ROS_INFO("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
 
                     min_x = std::min(std::max(min_x, 0), ind_ptr->image.size().width-1);
                     max_x = std::min(std::max(max_x, 0), ind_ptr->image.size().width-1);
                     min_y = std::min(std::max(min_y, 0), ind_ptr->image.size().height-1);
                     max_y = std::min(std::max(max_y, 0), ind_ptr->image.size().height-1);
 
+                    ROS_INFO("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
+
+                    int in_range=0, invalid=0,out_range=0;
                     for(int y = min_y; y <= max_y; ++y) {
                         for(int x = min_x; x <= max_x; ++x) {
                             // if point in quadrilateral TODO: Fix this check
                             if(true) {
-                                int32_t index = ind_ptr->image.at<int32_t>(y,x);
+                                int32_t index = ind_ptr->image.at<cv::Vec2i>(y,x)[1];
                                 if(index >= 0 && index < samples[i].cloud->points.size()) {
                                     samples[i].cloud->points[index].id = string_to_id(request.target.name);
                                     samples[i].cloud->points[index].r = 0;
                                     samples[i].cloud->points[index].g = 0;
                                     samples[i].cloud->points[index].b = 255;
-                                }
+                                    ++in_range;
+                                } else if(index == -1) {++invalid;}
+                                else ++out_range;
                             }
                         }
                     }
+
+                    ROS_INFO("%d/%d points invalid, %d/%d points out of range", invalid, invalid+out_range+in_range, out_range, invalid+out_range+in_range);
                 }
             }
 
