@@ -139,8 +139,8 @@ float ObjectRecognizer::detect(cv::Mat color, std::vector<std::vector<cv::Point2
             score = 0;
         }
 
-        cv::imshow("TEST", color);
-        cv::waitKey(0);
+        //cv::imshow("TEST", color);
+        //cv::waitKey(1);
 
         best_score = std::max(best_score, score);
     }

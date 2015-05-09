@@ -532,7 +532,7 @@ protected:
         // -----------------
         // Clustering
         // -----------------
-        clusters.push_back(extractClusters(out, object));
+        clusters.push_back(segmentCloud(out, object));
 
         if(config.calib.find(object) == config.calib.end()) {
             ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
@@ -557,6 +557,7 @@ protected:
             response.pose.header.stamp = stamp;
             response.pose.header.frame_id = shelf_frame;
             Eigen::Quaternionf quaternion(result->rotation);
+            response.valid = true;
             response.pose.pose.position.x = result->position.x;
             response.pose.pose.position.y = result->position.y;
             response.pose.pose.position.z = result->position.z;
@@ -589,11 +590,10 @@ protected:
         pointcloud_pub.publish(out);
 
         samples.clear();
-        //pointcloud_pub.publish(pubcloud);
         return true;
     }
 
-    PointCluster extractClusters(PointCloud::Ptr cloud, std::string object)
+    PointCluster segmentCloud(PointCloud::Ptr cloud, std::string object)
     {
         // ------------------------------
         // Cluster extraction
@@ -627,7 +627,8 @@ protected:
             PointT position;
             Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
             float boundingBoxProbability = scoreBoundingBox(object, segment, position, rotation);
-            float featureMatchProbability = scoreFeatureMatch(object, segment, cloud);
+            // TODO: Get actual number of objects
+            float featureMatchProbability = scoreFeatureMatch(object, segment, cloud, 1);
 
             float score = boundingBoxProbability * featureMatchProbability;
             ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
@@ -649,7 +650,8 @@ protected:
     float scoreFeatureMatch(
         std::string object,
         PointCloud::Ptr segment,
-        PointCloud::Ptr cloud)
+        PointCloud::Ptr cloud,
+        int num_objs)
     {
         int num_total_points = 0, num_segment_points = 0;
         uint64_t obj_id = string_to_id(object);
@@ -662,7 +664,11 @@ protected:
             if(cloud->points[i].id == obj_id) ++num_total_points;
         }
 
-        return (float)num_segment_points / (float)num_total_points;
+        if(num_total_points == 0) {
+            return 1.0/num_objs;
+        } else {
+            return (float)num_segment_points / (float)num_total_points;
+        }
     }
 
     float scoreBoundingBox(
