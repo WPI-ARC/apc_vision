@@ -113,6 +113,13 @@ struct PointCluster {
     PointT position;
     float score;
     PointCloud::Ptr out;
+    bool valid;
+
+    PointCluster() :
+        rotation(Eigen::Matrix3f::Identity()),
+        score(0.0),
+        valid(false)
+    {}
 };
 
 bool bestScoreComparison(const PointCluster &a, const PointCluster &b)
@@ -546,18 +553,21 @@ protected:
 
         // Get best cluster
         std::list<PointCluster>::iterator result = std::min_element(clusters.begin(), clusters.end(), bestScoreComparison);
-        if(clusters.end()==result)
+        if(clusters.end() == result)
         {
             ROS_ERROR("Could not find best cluster");
             return true;
         }
         else
         {
+            if(!result->valid) {
+                ROS_ERROR("'Best' cluster was not valid");
+            }
             ros::Time stamp = ros::Time::now();//lastPC->header.stamp;
             response.pose.header.stamp = stamp;
             response.pose.header.frame_id = shelf_frame;
             Eigen::Quaternionf quaternion(result->rotation);
-            response.valid = true;
+            response.valid = result->valid;
             response.pose.pose.position.x = result->position.x;
             response.pose.pose.position.y = result->position.y;
             response.pose.pose.position.z = result->position.z;
@@ -613,7 +623,7 @@ protected:
 
 
         PointCluster cluster;
-        float best_score = 1.0;
+        float best_score = 0.0;
 
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
@@ -633,12 +643,13 @@ protected:
             float score = boundingBoxProbability * featureMatchProbability;
             ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
 
-            if(score < best_score) {
+            if(score > best_score) {
                 best_score = score;
                 cluster.score = score;
                 cluster.rotation = rotation;
                 cluster.position = position;
                 cluster.out = segment;
+                cluster.valid = true;
             }
 
             i++;
