@@ -3,81 +3,107 @@ objects:
     cheezit_big_original: 
         files: ['images/cheezit.jpg']
         size: [0.062, 0.16, 0.226]
+	colors: []
     genuine_joe_plastic_stir_sticks:
         files: ['images/stirsticks.jpg']
         size: [0.095, 0.107, 0.145]
+	colors: []
     crayola_64_ct:
         files: []
         size: [0.037, 0.125, 0.145]
+	colors: ['yellow, 'green']
     expo_dry_erase_board_eraser:
         files: ['images/expo.jpg']
         size: [0.035, 0.055, 0.13]
+	colors: []
     elmers_washable_no_run_school_glue:
         files: ['images/glue.jpg']
         size: [0.025, 0.06, 0.145]
+	colors: []
     kyjen_squeakin_eggs_plush_puppies:
         files: []
         size: [0.06, 0.121, 0.18]
+	colors: ['yellow, 'orange', 'blue']
     oreo_mega_stuf:
         files: []
         size: [0.06, 0.155, 0.2]
+	colors: []
     champion_copper_plus_spark_plug:
         files: []
         size: [0.02, 0.025, 0.095]
+	colors: []
     munchkin_white_hot_duck_bath_toy:
         files: []
         size: [0.065, 0.095, 0.13]
+	colors: ['yellow']
     mommys_helper_outlet_plugs:
         files: []
         size: [0.055, 0.09, 0.19]
+	colors: []
     sharpie_accent_tank_style_highlighters:
         files: []
         size: [0.023, 0.116, 0.125]
+	colors: ['orange', 'blue', 'green']
     stanley_66_052:
         files: []
         size: [0.02, 0.1, 0.195]
+	colors: ['yellow']
     safety_works_safety_glasses:
         files: []
         size: [0.05, 0.07, 0.2]
+	colors: []
     paper_mate_12_count_mirado_black_warrior:
         files: []
         size: [0.016, 0.05, 0.195]
+	colors: []
     mark_twain_huckleberry_finn:
         files: []
         size: [0.012, 0.132, 0.21]
+	colors: []
     first_years_take_and_toss_straw_cup:
         files: []
         size: [0.08, 0.09, 0.17]
+	colors: ['blue']
     feline_greenies_dental_treats:
         files: []
         size: [0.04, 0.175, 0.21]
+	colors: []
     laugh_out_loud_joke_book:
         files: []
-        size: [0.01, 0.108, 0.177]
+        size: [0.01, 0.108, 0.177]	
+	colors: []
     kong_air_dog_squeakair_tennis_ball:
         files: []
         size: [0.07, 0.108, 0.19]
+	colors: ['green', 'red']
     highland_6539_self_stick_notes:
         files: []
         size: [0.05, 0.04, 0.115]
+	colors: []
     kong_sitting_frog_dog_toy:
         files: []
         size: [0.045, 0.09, 0.21]
+	colors: ['green']
     kong_duck_dog_toy:
         files: []
         size: [0.05, 0.09, 0.18]
+	colors: ['yellow']
     rolodex_jumbo_pencil_cup:
         files: []
         size: [0.107, 0.14, 0.107]
+	colors: []
     mead_index_cards:
         files: []
         size: [0.02, 0.076, 0.127]
+	colors: []
     dr_browns_bottle_brush:
         files: []
         size: [0.05, 0.107, 0.305]
+	colors: []
     test_object:
         files: []
         size: [0.0, 0.0, 0.0]
+	colors: []
 shelf:
     A: [-0.43, -.01,  0.17764, 0.39,    1.55794, 1.77212]
     B: [-0.43, -.01, -0.12, 0.14331, 1.55794, 1.77212]
