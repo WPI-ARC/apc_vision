@@ -1,0 +1,6 @@
+string bin
+---
+int32 SUCCESS = 0
+
+Sample[] samples
+int32 status
