@@ -557,13 +557,14 @@ bool ColorDetector::detect(std::string objectName, Mat src, Mat contoursrc, stri
 //            cout<< image_path<<endl;
             return false;
         }
-/*
+
         namedWindow( "Bounding Box", CV_WINDOW_AUTOSIZE );
         imshow( "Bounding Box", src );
-
+        waitKey(1);
         namedWindow( "Draw contour", CV_WINDOW_AUTOSIZE );
         imshow( "Draw contour", contoursrc );
-*/
+        waitKey(1);
+
 }
 
 

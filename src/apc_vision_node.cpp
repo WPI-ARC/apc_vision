@@ -96,10 +96,11 @@ struct Sample {
 
 struct ObjInfo {
     ObjInfo() {}
-    ObjInfo(std::vector<std::string> calibFiles, std::vector<float> dimensions) : calibFiles(calibFiles), dimensions(dimensions) {}
+    ObjInfo(std::vector<std::string> calibFiles, std::vector<float> dimensions, std::vector<std::string> colors) : calibFiles(calibFiles), dimensions(dimensions), colors(colors){}
 
     std::vector<std::string> calibFiles;
     std::vector<float>       dimensions;
+    std::vector<std::string> colors;
 };
 
 struct Config {
@@ -825,7 +826,10 @@ int main(int argc, char** argv) {
         std::vector<float> dimensions;
         (*iter)["size"] >> dimensions;
 
-        config.calib[key] = ObjInfo(files, dimensions);
+        std::vector<std::string> colors;
+        (*iter)["colors"] >> dimensions;
+
+        config.calib[key] = ObjInfo(files, dimensions, colors);
     }
 
     for(cv::FileNodeIterator iter = configFile["shelf"].begin(); iter != configFile["shelf"].end(); iter++) {
