@@ -101,7 +101,7 @@ public:
     ProcessServer(ros::NodeHandle& nh, Config config) :
         process_server(nh.advertiseService("process_samples", &ProcessServer::process_cb, this)),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
-        pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
+        pose_pub(nh.advertise<geometry_msgs::Pose>(pose_topic, 1)),
         config(config),
         marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1)),
         limits_pub(nh.advertise<visualization_msgs::Marker>(limits_topic, 1))
