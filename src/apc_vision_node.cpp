@@ -110,14 +110,21 @@ struct Config {
     BinLimitsMap bin_limits;
 };
 
-struct BestCluster{
+struct PointCluster {
     Eigen::Matrix3f rotation;
     PointT position;
     float score;
     PointCloud::Ptr out;
+    bool valid;
+
+    PointCluster() :
+        rotation(Eigen::Matrix3f::Identity()),
+        score(0.0),
+        valid(false)
+    {}
 };
 
-bool bestScoreComparison(const BestCluster &a, const BestCluster &b)
+bool bestScoreComparison(const PointCluster &a, const PointCluster &b)
 {
     return a.score<b.score;
 }
@@ -131,10 +138,10 @@ public:
         uv_sub_right(nh, right_uv_topic, 1),
         left_image_sub(nh.subscribe(left_image_topic, 1, &VisionProcessor::left_image_cb, this)),
         right_image_sub(nh.subscribe(right_image_topic, 1, &VisionProcessor::right_image_cb, this)),
-        left_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::left_index_image_cb, this)),
-        right_index_image_sub(nh.subscribe(right_index_image_topic, 1, &VisionProcessor::right_index_image_cb, this)),
-        left_sync(pointcloud_sub_left, uv_sub_left, 10),
-        right_sync(pointcloud_sub_right, uv_sub_right, 10),
+        left_index_image_sub(nh, left_index_image_topic, 1),
+        right_index_image_sub(nh, right_index_image_topic, 1),
+        left_sync(pointcloud_sub_left, uv_sub_left, left_index_image_sub, 10),
+        right_sync(pointcloud_sub_right, uv_sub_right, right_index_image_sub, 10),
         pointcloud_pub(nh.advertise<PointCloud>(out_topic, 1)),
         pose_pub(nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1)),
         sample_server(nh.advertiseService("sample_vision", &VisionProcessor::sample_cb, this)),
@@ -143,8 +150,8 @@ public:
         marker_pub(nh.advertise<visualization_msgs::Marker>(marker_topic, 1)),
         limits_pub(nh.advertise<visualization_msgs::Marker>(limits_topic, 1))
     {
-        left_sync.registerCallback(boost::bind(&VisionProcessor::process_left, this, _1, _2));
-        right_sync.registerCallback(boost::bind(&VisionProcessor::process_right, this, _1, _2));
+        left_sync.registerCallback(boost::bind(&VisionProcessor::process_left, this, _1, _2, _3));
+        right_sync.registerCallback(boost::bind(&VisionProcessor::process_right, this, _1, _2, _3));
 
         for(Config::CalibMap::iterator it = config.calib.begin(); it != config.calib.end(); it++) {
             objDetectors[it->first] = ObjectRecognizer(it->second.calibFiles);
@@ -160,11 +167,16 @@ protected:
 
     ros::Subscriber left_image_sub;
     ros::Subscriber right_image_sub;
-    ros::Subscriber left_index_image_sub;
-    ros::Subscriber right_index_image_sub;
+    message_filters::Subscriber<sensor_msgs::Image> left_index_image_sub;
+    message_filters::Subscriber<sensor_msgs::Image> right_index_image_sub;
 
-    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> left_sync;
-    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> right_sync;
+    message_filters::TimeSynchronizer<
+        sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::Image
+    > left_sync;
+
+    message_filters::TimeSynchronizer<
+        sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::Image
+    > right_sync;
 
     ros::Publisher pointcloud_pub;
     ros::Publisher pose_pub;
@@ -190,34 +202,118 @@ protected:
 
     std::vector<Sample> samples;
 
-    void left_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastImage_left = img;
+    void left_image_cb(const sensor_msgs::ImageConstPtr& image) {
+        lastImage_left = image;
     }
 
-    void right_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastImage_right = img;
+    void right_image_cb(const sensor_msgs::ImageConstPtr& image) {
+        lastImage_right = image;
     }
 
-    void left_index_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastIndexImage_left = img;
-    }
-
-    void right_index_image_cb(const sensor_msgs::ImageConstPtr& img) {
-        lastIndexImage_right = img;
-    }
-
-    void process_left(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
-                 const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
+    void process_left(
+        const sensor_msgs::PointCloud2::ConstPtr& pc_msg, 
+        const sensor_msgs::PointCloud2::ConstPtr& uv_msg, 
+        const sensor_msgs::ImageConstPtr& index_image) 
+    {
         lastPC_left = pc_msg;
         lastUVC_left = uv_msg;
+        lastIndexImage_left = index_image;
     }
 
-    void process_right(const sensor_msgs::PointCloud2::ConstPtr& pc_msg, const sensor_msgs::PointCloud2::ConstPtr& uv_msg) {
+    void process_right(
+        const sensor_msgs::PointCloud2::ConstPtr& pc_msg,
+        const sensor_msgs::PointCloud2::ConstPtr& uv_msg,
+        const sensor_msgs::ImageConstPtr& index_image) 
+    {
         lastPC_right = pc_msg;
         lastUVC_right = uv_msg;
+        lastIndexImage_right = index_image;
+    }
+
+    bool filter(PointCloud::Ptr cloud, std::string bin) {
+        // ------------------------------
+        // Filter out bin
+        // ------------------------------
+        pcl::PassThrough<PointT> filter;
+
+        if(config.bin_limits.find(bin) == config.bin_limits.end()) {
+            ROS_ERROR("Could not find bin limits for bin `%s'", bin.c_str());
+            return false;
+        }
+        std::vector<float>& limits = config.bin_limits[bin];
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = shelf_frame;
+        marker.header.stamp = ros::Time(0);
+        marker.type = visualization_msgs::Marker::CUBE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position.x = (limits[0]+limits[1])/2;
+        marker.pose.position.y = (limits[2]+limits[3])/2;
+        marker.pose.position.z = (limits[4]+limits[5])/2;
+        marker.pose.orientation.x = 0;
+        marker.pose.orientation.y = 0;
+        marker.pose.orientation.z = 0;
+        marker.pose.orientation.w = 1;
+        marker.scale.x = limits[1]-limits[0];
+        marker.scale.y = limits[3]-limits[2];
+        marker.scale.z = limits[5]-limits[4];
+        marker.color.r = 40.0;
+        marker.color.g = 230.0;
+        marker.color.b = 40.0;
+        marker.color.a = 0.7;
+        limits_pub.publish(marker);
+
+        ROS_INFO("Bin '%s' limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", bin.c_str(), limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
+
+        ROS_INFO("%zd points before filtering\n", cloud->points.size());
+
+        filter.setInputCloud(cloud);
+        filter.setFilterFieldName("x");
+        filter.setFilterLimits(limits[0], limits[1]);
+        //filter.filter(*indices);
+        filter.filter(*cloud);
+
+        ROS_INFO("%zd points left after filtering x\n", cloud->points.size());
+
+        filter.setInputCloud(cloud);
+        //filter.setIndices(indices);
+        filter.setFilterFieldName("y");
+        filter.setFilterLimits(limits[2], limits[3]);
+        //filter.filter(*indices);
+        filter.filter(*cloud);
+        ROS_INFO("%zd points left after filtering y\n", cloud->points.size());
+
+        filter.setInputCloud(cloud);
+        //filter.setIndices(indices);
+        filter.setFilterFieldName("z");
+        filter.setFilterLimits(limits[4], limits[5]);
+        //filter.filter(*indices);
+        filter.filter(*cloud);
+        ROS_INFO("%zd points left after filtering z\n", cloud->points.size());
+
+        // ------------------------------------
+        // Filter out statistical outliers
+        // ------------------------------------
+        pcl::StatisticalOutlierRemoval<PointT> sor;
+        sor.setInputCloud (cloud);
+        //sor.setIndices(indices);
+        sor.setMeanK (50);
+        sor.setStddevMulThresh (1.0);
+        //sor.filter (*indices);
+        sor.filter(*cloud);
+        ROS_INFO("%zd points left after SOR filtering\n", cloud->points.size());
+
+        if(!cloud->points.size()) {
+            ROS_ERROR("Empty filtered point cloud!");
+            return false;
+        }
+
+        return true;
     }
 
     bool sample_cb(SampleVision::Request& request, SampleVision::Response& response) {
+        response.success = false;
+
         sensor_msgs::PointCloud2::ConstPtr lastPC;
         sensor_msgs::PointCloud2::ConstPtr lastUVC;
         sensor_msgs::ImageConstPtr lastImage;
@@ -239,8 +335,14 @@ protected:
         }
 
         if(request.command != "reset") {
-            if(!lastPC.get()) return false;
-            if(!lastUVC.get()) return false;
+            if(!lastPC.get()) {
+                ROS_ERROR("No pointclouds have been recieved!");
+                return true;
+            }
+            if(!lastUVC.get()) {
+                ROS_ERROR("No UV pointclouds have been recieved!");
+                return true;
+            }
 
             pcl::PCLPointCloud2 uv_pc2, pc_pc2;
 
@@ -268,8 +370,8 @@ protected:
             bool success = listener.waitForTransform(shelf_frame, camera_frame, stamp, ros::Duration(2.0));
             // If transform isn't found in that time, give up
             if(!success) {
-                std::cerr << "Couldn't lookup transform!" << std::endl;
-                return false;
+                ROS_ERROR("Couldn't look up camera to shelf transform!");
+                return true;
             }
             // Otherwise, get the transform
             listener.lookupTransform(shelf_frame, camera_frame, stamp, transform);
@@ -284,92 +386,6 @@ protected:
             camera_heading = camera_heading - camera_origin;
             */
 
-            // ------------------------------
-            // Filter out bin
-            // ------------------------------
-            pcl::PassThrough<PointT> filter;
-            //pcl::IndicesPtr indices(new std::vector<int>);
-
-            if(config.bin_limits.find(request.command) == config.bin_limits.end()) return false;
-            std::vector<float>& limits = config.bin_limits[request.command];
-
-            visualization_msgs::Marker marker;
-            marker.header.frame_id = shelf_frame;
-            marker.header.stamp = ros::Time(0);
-            marker.type = visualization_msgs::Marker::CUBE;
-            marker.action = visualization_msgs::Marker::ADD;
-            marker.pose.position.x = (limits[0]+limits[1])/2;
-            marker.pose.position.y = (limits[2]+limits[3])/2;
-            marker.pose.position.z = (limits[4]+limits[5])/2;
-            marker.pose.orientation.x = 0;
-            marker.pose.orientation.y = 0;
-            marker.pose.orientation.z = 0;
-            marker.pose.orientation.w = 1;
-            marker.scale.x = limits[1]-limits[0];
-            marker.scale.y = limits[3]-limits[2];
-            marker.scale.z = limits[5]-limits[4];
-            marker.color.r = 40.0;
-            marker.color.g = 230.0;
-            marker.color.b = 40.0;
-            marker.color.a = 0.7;
-            limits_pub.publish(marker);
-
-            ROS_INFO("Bin limits: x: [%f, %f], y: [%f, %f], z: [%f, %f]\n", limits[0], limits[1], limits[2], limits[3], limits[4], limits[5]);
-
-            ROS_INFO("%zu points before filtering\n", out->points.size());
-
-            filter.setInputCloud(out);
-            filter.setFilterFieldName("x");
-            filter.setFilterLimits(limits[0], limits[1]);
-            //filter.filter(*indices);
-            filter.filter(*out);
-
-            ROS_INFO("%zu points left after filtering x\n", out->points.size());
-
-            filter.setInputCloud(out);
-            //filter.setIndices(indices);
-            filter.setFilterFieldName("y");
-            filter.setFilterLimits(limits[2], limits[3]);
-            //filter.filter(*indices);
-            filter.filter(*out);
-            ROS_INFO("%zu points left after filtering y\n", out->points.size());
-
-            filter.setInputCloud(out);
-            //filter.setIndices(indices);
-            filter.setFilterFieldName("z");
-            filter.setFilterLimits(limits[4], limits[5]);
-            //filter.filter(*indices);
-            filter.filter(*out);
-            ROS_INFO("%zu points left after filtering z\n", out->points.size());
-
-            // ------------------------------------
-            // Filter out statistical outliers
-            // ------------------------------------
-            pcl::StatisticalOutlierRemoval<PointT> sor;
-            sor.setInputCloud (out);
-            //sor.setIndices(indices);
-            sor.setMeanK (50);
-            sor.setStddevMulThresh (1.0);
-            //sor.filter (*indices);
-            sor.filter(*out);
-
-            ROS_INFO("%zu points left after SOR filter\n", out->points.size());
-
-            // Use icp to match clouds
-            //if(samples.size() > 0) {
-            if(0){
-                pcl::IterativeClosestPoint<PointT, PointT> icp;
-                icp.setMaximumIterations(50);
-                icp.setInputSource(out);
-                icp.setInputTarget(samples[0].cloud);
-                PointCloud::Ptr p(new PointCloud);
-                icp.align(*p);
-                if(icp.hasConverged()) {
-                    out = p;
-                }
-            }
-            //pointcloud_pub.publish(out);
-
             Sample sample;
             sample.cloud = out;
             sample.image = lastImage;
@@ -377,13 +393,17 @@ protected:
 
             samples.push_back(sample);
 
+            response.success = true;
+
             return true;
         } else {
+            response.success = true;
             samples.clear();
             return true;
         }
     }
-    bool showMarkers(std::list<BestCluster>::iterator result, std::vector<float> dims)
+
+    bool showMarkers(std::list<PointCluster>::iterator result, std::vector<float> dims)
     {
         Eigen::Quaternionf quaternion(result->rotation);
         visualization_msgs::Marker marker;
@@ -407,7 +427,9 @@ protected:
         marker.color.a = 0.7;
         marker_pub.publish(marker);
     }
+
     bool process_cb(ProcessVision::Request& request, ProcessVision::Response& response) {
+        response.valid = false;
 
         std::string object = request.target.name;
         std::vector<float> dims = config.calib[object].dimensions;
@@ -415,79 +437,139 @@ protected:
 
         // Combine sampled pointclouds.
         PointCloud::Ptr out(new PointCloud);
-        std::list<BestCluster> bestCluster;
-        std::list<BestCluster>::iterator it=bestCluster.begin();
+        std::list<PointCluster> clusters;
+        std::list<PointCluster>::iterator it=clusters.begin();
         for(int i = 0 ; i < samples.size(); i++, it++) {
             if(!samples[i].cloud->points.size()) {
                 ROS_WARN("Empty pointcloud from sample %d\n", i);
                 continue;
             }
 
+            // --------------------------
+            // Feature Matching
+            // --------------------------
             std::map<std::string, ObjectRecognizer>::iterator feature_matcher = objDetectors.find(request.target.name);
             if(feature_matcher == objDetectors.end()) {
                 ROS_INFO("No feature matcher for object `%s'", request.target.name.c_str());
             } else {
+                ROS_DEBUG("Converting rgb image to OpenCV for object `%s'", request.target.name.c_str());
                 cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(samples[i].image, sensor_msgs::image_encodings::BGR8);
-                cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(samples[i].indices, sensor_msgs::image_encodings::TYPE_32SC1);
+                ROS_DEBUG("Converting index image to OpenCV for object `%s'", request.target.name.c_str());
+                cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(samples[i].indices, sensor_msgs::image_encodings::TYPE_32SC2);
+                ROS_DEBUG("Feature matching for object `%s'", request.target.name.c_str());
                 std::vector<std::vector<cv::Point2f> > obj_bounds;
                 float score = feature_matcher->second.detect(img_ptr->image, obj_bounds);
                 ROS_INFO("Score %f for object `%s'", score, request.target.name.c_str());
 
+                ROS_DEBUG("Image size (%d,%d), indices size (%d,%d)", img_ptr->image.size().width, img_ptr->image.size().height, ind_ptr->image.size().width, ind_ptr->image.size().height);
+                ROS_DEBUG("Object matches found: %zd", obj_bounds.size());
+
                 for(int obj = 0; obj < obj_bounds.size(); ++obj) {
                     int min_x=INT_MAX, max_x=0, min_y=INT_MAX, max_y=0;
                     for(int p = 0; p < obj_bounds[obj].size(); ++p) {
+                        ROS_INFO("Point (%f, %f)", obj_bounds[obj][p].x, obj_bounds[obj][p].y);
                         min_x = std::min(min_x, (int)obj_bounds[obj][p].x);
-                        max_x = std::min(max_x, (int)obj_bounds[obj][p].x);
+                        max_x = std::max(max_x, (int)obj_bounds[obj][p].x);
                         min_y = std::min(min_y, (int)obj_bounds[obj][p].y);
-                        max_y = std::min(max_y, (int)obj_bounds[obj][p].y);
+                        max_y = std::max(max_y, (int)obj_bounds[obj][p].y);
                     }
 
+                    ROS_INFO("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
+
+                    min_x = (min_x * ind_ptr->image.size().width) / img_ptr->image.size().width;
+                    max_x = (max_x * ind_ptr->image.size().width) / img_ptr->image.size().width;
+                    min_y = (min_y * ind_ptr->image.size().height) / img_ptr->image.size().height;
+                    max_y = (max_y * ind_ptr->image.size().height) / img_ptr->image.size().height;
+
+                    ROS_INFO("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
+
+                    min_x = std::min(std::max(min_x, 0), ind_ptr->image.size().width-1);
+                    max_x = std::min(std::max(max_x, 0), ind_ptr->image.size().width-1);
+                    min_y = std::min(std::max(min_y, 0), ind_ptr->image.size().height-1);
+                    max_y = std::min(std::max(max_y, 0), ind_ptr->image.size().height-1);
+
+                    ROS_INFO("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
+
+                    int in_range=0, invalid=0,out_range=0;
                     for(int y = min_y; y <= max_y; ++y) {
-                        for(int x = min_x; y <= max_x; ++x) {
-                            // xf poxnt xn quadrxlateral TODO: Fxx thxs check
+                        for(int x = min_x; x <= max_x; ++x) {
+                            // if point in quadrilateral TODO: Fix this check
                             if(true) {
-                                int32_t index = ind_ptr->image.at<int32_t>(y,x);
-                                if(index >= 0) {
+                                int32_t index = ind_ptr->image.at<cv::Vec2i>(y,x)[1];
+                                if(index >= 0 && index < samples[i].cloud->points.size()) {
                                     samples[i].cloud->points[index].id = string_to_id(request.target.name);
                                     samples[i].cloud->points[index].r = 0;
                                     samples[i].cloud->points[index].g = 0;
                                     samples[i].cloud->points[index].b = 255;
-                                }
+                                    ++in_range;
+                                } else if(index == -1) {++invalid;}
+                                else ++out_range;
                             }
                         }
                     }
+
+                    ROS_INFO("%d/%d points invalid, %d/%d points out of range", invalid, invalid+out_range+in_range, out_range, invalid+out_range+in_range);
                 }
             }
 
-            bestCluster.push_back(extractClusters(samples[i].cloud, object));
-            //showMarkers(it, dims);
-            //pointcloud_pub.publish(samples[i]);
+            // Use icp to match clouds
+            if(i > 0) {
+                pcl::IterativeClosestPoint<PointT, PointT> icp;
+                icp.setMaximumIterations(50);
+                icp.setInputSource(samples[i].cloud);
+                icp.setInputTarget(samples[0].cloud);
+                icp.align(*samples[i].cloud);
+
+                if(icp.hasConverged()) {
+                    ROS_INFO("ICP converged\n");
+                }
+            }
+
             *out += *samples[i].cloud;
-            //ros::Duration(2).sleep(); 
         }
 
         if(!out->points.size()) {
             ROS_ERROR("Empty combined pointcloud\n");
-            return false;
+            return true;
         }
 
-        bestCluster.push_back(extractClusters(out, object));
+        if(!filter(out, request.bin)) {
+            ROS_ERROR("Empty filtered pointcloud");
+            return true;
+        }
 
-        if(config.calib.find(object) == config.calib.end()) return false;
-        if(config.calib[object].dimensions.size() == 0) return false;
+        // -----------------
+        // Clustering
+        // -----------------
+        clusters.push_back(segmentCloud(out, object));
 
-        // Get bestCluster
-        std::list<BestCluster>::iterator result = std::min_element(bestCluster.begin(), bestCluster.end(), bestScoreComparison);
-        if(bestCluster.end()==result)
+        if(config.calib.find(object) == config.calib.end()) {
+            ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
+            return true;
+        }
+
+        if(config.calib[object].dimensions.size() == 0) {
+            ROS_ERROR("Object dimensions nonexistent for object `%s'", object.c_str());
+            return true;
+        }
+
+        // Get best cluster
+        std::list<PointCluster>::iterator result = std::min_element(clusters.begin(), clusters.end(), bestScoreComparison);
+        if(clusters.end() == result)
         {
-            return false;
+            ROS_ERROR("Could not find best cluster");
+            return true;
         }
         else
         {
+            if(!result->valid) {
+                ROS_ERROR("'Best' cluster was not valid");
+            }
             ros::Time stamp = ros::Time::now();//lastPC->header.stamp;
             response.pose.header.stamp = stamp;
             response.pose.header.frame_id = shelf_frame;
             Eigen::Quaternionf quaternion(result->rotation);
+            response.valid = result->valid;
             response.pose.pose.position.x = result->position.x;
             response.pose.pose.position.y = result->position.y;
             response.pose.pose.position.z = result->position.z;
@@ -499,8 +581,8 @@ protected:
             bool success = listener.waitForTransform(shelf_frame, base_frame, stamp, ros::Duration(2.0));
             // If transform isn't found in that time, give up
             if(!success) {
-                ROS_WARN("Couldn't lookup transform from shelf to base_link!");
-                return false;
+                ROS_ERROR("Couldn't lookup transform from shelf to base_link!");
+                return true;
             }
             listener.transformPose(base_frame, response.pose, response.pose);
 
@@ -520,11 +602,10 @@ protected:
         pointcloud_pub.publish(out);
 
         samples.clear();
-        //pointcloud_pub.publish(pubcloud);
         return true;
     }
 
-    BestCluster extractClusters(PointCloud::Ptr out, std::string object)
+    PointCluster segmentCloud(PointCloud::Ptr cloud, std::string object)
     {
         // ------------------------------
         // Cluster extraction
@@ -532,84 +613,99 @@ protected:
 
         // Creating the KdTree object for the search method of the extraction
         pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
-        //tree->setInputCloud (out, indices);
-        tree->setInputCloud (out);
+        tree->setInputCloud (cloud);
 
         std::vector<pcl::PointIndices> cluster_indices;
         pcl::EuclideanClusterExtraction<PointT> ec;
         ec.setClusterTolerance (0.01); // 1cm
         ec.setMinClusterSize (100);
-        //ec.setMaxClusterSize (250000);
         ec.setSearchMethod (tree);
-        ec.setInputCloud (out);
-        //ec.setIndices(indices);
+        ec.setInputCloud (cloud);
         ec.extract (cluster_indices);
 
-        //visualization_msgs::MarkerArray array_msg;
 
-        BestCluster bestCluster;
-        float best_score = 1.0;
+        PointCluster cluster;
+        float best_score = 0.0;
 
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
         {
+            // Create a new pointcloud with just the points of this segment
             PointCloud::Ptr segment(new PointCloud);
-            pcl::PointIndices::Ptr indices_(new pcl::PointIndices);
             for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit) {
-                //out->points[*pit].r = 0;
-                //out->points[*pit].g = 200-i*50;
-                //out->points[*pit].b = i*50;
-                indices_->indices.push_back(*pit);
-                segment->points.push_back(out->points[*pit]);
+                segment->points.push_back(cloud->points[*pit]);
             }
 
-            pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
-            feature_extractor.setInputCloud(out);
-            feature_extractor.setIndices(indices_);
-            feature_extractor.compute();
-
-            PointT minPoint, maxPoint, position;
+            PointT position;
             Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
-            Eigen::Vector3f mass_center;
+            float boundingBoxProbability = scoreBoundingBox(object, segment, position, rotation);
+            // TODO: Get actual number of objects
+            float featureMatchProbability = scoreFeatureMatch(object, segment, cloud, 1);
 
-            feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
-            feature_extractor.getMassCenter(mass_center);
+            float score = boundingBoxProbability * featureMatchProbability;
+            ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
 
-            std::vector<float> dims;
-            dims.push_back(maxPoint.x - minPoint.x);
-            dims.push_back(maxPoint.y - minPoint.y);
-            dims.push_back(maxPoint.z - minPoint.z);
-
-
-            float score = detectCuboidPose(object, position, rotation, dims);
-
-            if(score < best_score) {
+            if(score > best_score) {
                 best_score = score;
-                bestCluster.score = score;
-                bestCluster.rotation = rotation;
-                bestCluster.position = position;
-                bestCluster.out = segment;
+                cluster.score = score;
+                cluster.rotation = rotation;
+                cluster.position = position;
+                cluster.out = segment;
+                cluster.valid = true;
             }
 
             i++;
         }
 
-        out->header.frame_id = shelf_frame;
-
-        return bestCluster;
+        return cluster;
     }
 
-    float detectCuboidPose(
+    float scoreFeatureMatch(
+        std::string object,
+        PointCloud::Ptr segment,
+        PointCloud::Ptr cloud,
+        int num_objs)
+    {
+        int num_total_points = 0, num_segment_points = 0;
+        uint64_t obj_id = string_to_id(object);
+
+        for(int i = 0; i < segment->points.size(); ++i) {
+            if(segment->points[i].id == obj_id) ++num_segment_points;
+        }
+
+        for(int i = 0; i < cloud->points.size(); ++i) {
+            if(cloud->points[i].id == obj_id) ++num_total_points;
+        }
+
+        if(num_total_points == 0) {
+            return 1.0/num_objs;
+        } else {
+            return (float)num_segment_points / (float)num_total_points;
+        }
+    }
+
+    float scoreBoundingBox(
         // Object name
         std::string object,
-        // Position and orientation from OBB
-        PointT position, 
-        Eigen::Matrix3f& rotation,
-        // OBB size
-        std::vector<float>& sensed_dims
-        // Direction camera is pointing
-        //Eigen::Vector3f camera_vector
-    ) {
+        // Pointcloud segment
+        PointCloud::Ptr segment,
+        PointT& position,
+        Eigen::Matrix3f& rotation)
+    {
+        // Estimate OBB
+        pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
+        feature_extractor.setInputCloud(segment);
+        feature_extractor.compute();
+
+        PointT minPoint, maxPoint;
+
+        feature_extractor.getOBB(minPoint, maxPoint, position, rotation);
+
+        std::vector<float> sensed_dims;
+        sensed_dims.push_back(maxPoint.x - minPoint.x);
+        sensed_dims.push_back(maxPoint.y - minPoint.y);
+        sensed_dims.push_back(maxPoint.z - minPoint.z);
+
         Eigen::Vector3f x(1.0, 0.0, 0.0);
         Eigen::Vector3f y(0.0, 1.0, 0.0);
         Eigen::Vector3f z(0.0, 0.0, 1.0);
@@ -617,18 +713,18 @@ protected:
         y = rotation*y;
         z = rotation*z;
 
-        //float xdot = std::abs(x.dot(camera_vector.cast<float>()));
-        //float ydot = std::abs(y.dot(camera_vector.cast<float>()));
-        //float zdot = std::abs(z.dot(camera_vector.cast<float>()));
-
         float best_score = 1.0;
         Eigen::Matrix3f best_rotation = Eigen::Matrix3f::Identity();
         Eigen::Vector3f offset(0.0, 0.0, 0.0);
 
-        //float dot_threshold = 0.93;
-
-        if(config.calib.find(object) == config.calib.end()) return false;
-        if(config.calib[object].dimensions.size() == 0) return false;
+        if(config.calib.find(object) == config.calib.end()) {
+            ROS_ERROR("Could not find object calibration info for object `%s'", object.c_str());
+            return false;
+        }
+        if(config.calib[object].dimensions.size() == 0) {
+            ROS_ERROR("Object dimensions nonexistent for object `%s'", object.c_str());
+            return false;
+        }
 
         std::vector<float>& known_dims = config.calib[object].dimensions;
         std::vector<float> new_dims = known_dims;
@@ -642,22 +738,7 @@ protected:
                     score += std::abs(sensed_dims[0] - known_dims[i]);
                     score += std::abs(sensed_dims[1] - known_dims[j]);
                     score += std::abs(sensed_dims[2] - known_dims[k]);
-                    /*
-                    int num = 0;
-                    if(xdot < dot_threshold) {
-                        score += std::abs(sensed_dims[0] - known_dims[i]);
-                        num++;
-                    }
-                    if(ydot < dot_threshold) {
-                        score += std::abs(sensed_dims[1] - known_dims[j]);
-                        num++;
-                    }
-                    if(zdot < dot_threshold) {
-                        score += std::abs(sensed_dims[2] - known_dims[k]);
-                        num++;
-                    }
-                    score /= num;
-                    */
+
                     if(score < best_score) {
                         best_score = score;
                         best_rotation = Eigen::Matrix3f::Identity();
@@ -690,29 +771,16 @@ protected:
                             new_dims[2] = known_dims[0];
                         }
                     }
-
-                    /*
-                    if(xdot >= dot_threshold) {
-                        float sign = xdot/x.dot(camera_heading.cast<float>());
-                        offset = x*sign*(known_dims[i]/2 - measured_dims[0]/2);
-                    }
-                    if(ydot >= dot_threshold) {
-                        float sign = ydot/y.dot(camera_heading.cast<float>());
-                        offset = y*sign*(known_dims[j]/2 - measured_dims[1]/2);
-                    }
-                    if(zdot >= dot_threshold) {
-                        float sign = zdot/z.dot(camera_heading.cast<float>());
-                        offset = z*sign*(known_dims[k]/2 - measured_dims[2]/2);
-                    }
-                    */
                 }
             }
         }
 
-        sensed_dims = known_dims;//new_dims;
+        sensed_dims = known_dims;
         rotation = best_rotation * rotation;
-        //position += offset;
-        return best_score;
+
+        // Convert 'score' to a 'probability'
+        // This is a rather arbitrary conversion
+        return 2.0 - 2.0/(1 + std::exp(-7.0*best_score));
     }
 
 };

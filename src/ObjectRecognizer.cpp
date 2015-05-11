@@ -131,13 +131,16 @@ float ObjectRecognizer::detect(cv::Mat color, std::vector<std::vector<cv::Point2
                 cv::line( color, scene_corners[1], scene_corners[2], drawColor, 4 );
                 cv::line( color, scene_corners[2], scene_corners[3], drawColor, 4 );
                 cv::line( color, scene_corners[3], scene_corners[0], drawColor, 4 );
-                obj_bounds.push_back(obj_corners);
+                obj_bounds.push_back(scene_corners);
             } else {
                 score = 0;
             }
         } else {
             score = 0;
         }
+
+        //cv::imshow("TEST", color);
+        //cv::waitKey(1);
 
         best_score = std::max(best_score, score);
     }
