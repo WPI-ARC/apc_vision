@@ -1,0 +1,9 @@
+string bin
+string command
+---
+int32 SUCCESS = 0
+int32 INVALID_COMMAND = -1
+int32 NO_DATA = -2
+int32 NO_TRANSFORM = -3
+
+int32 status
