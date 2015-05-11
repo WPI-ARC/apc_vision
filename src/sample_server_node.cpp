@@ -15,16 +15,21 @@
 // Eigen
 #include <Eigen/Geometry>
 // Service Description Includes
-#include "apc_vision/Sample.h"
+#include "apc_msgs/Sample.h"
 #include "apc_vision/TakeSample.h"
 #include "apc_vision/GetSamples.h"
 // Util
 #include "util.h"
 
+using namespace apc_msgs;
 using namespace apc_vision;
 
 // Camera topic names
+#if defined(USE_XYZRGB_ID)
 const static std::string left_xyz_topic = "/camera_left/points_xyzrgb";
+#elif defined(USE_XYZI_ID)
+const static std::string left_xyz_topic = "/camera_left/points_xyzconfidence";
+#endif
 const static std::string left_image_topic = "/camera_left/color";
 const static std::string left_index_image_topic = "/camera_left/depth_indices";
 // Frame names

@@ -50,6 +50,7 @@
 #include "ObjectIDs.h"
 
 using namespace apc_vision;
+using namespace apc_msgs;
 
 const static std::string out_topic = "/object_segmentation/points_xyz";
 const static std::string pose_topic = "/object_segmentation/pose";
@@ -278,10 +279,6 @@ protected:
                             int32_t index = ind_ptr->image.at<cv::Vec2i>(y,x)[1];
                             if(index >= 0 && index < cloud->points.size()) {
                                 cloud->points[index].id = string_to_id(object);
-                                cloud->points[index].r = 0;
-                                cloud->points[index].g = 0;
-                                cloud->points[index].b = 255;
-                                ++in_range;
                             } else if(index == -1) {++invalid;}
                             else ++out_range;
                         }
@@ -310,7 +307,7 @@ protected:
     }
 
     bool process_cb(ProcessSamples::Request& request, ProcessSamples::Response& response) {
-        std::string object = request.samples.target;
+        std::string object = request.samples.order.name;
         std::vector<float> dims = config.calib[object].dimensions;
         std::vector<Sample>& samples = request.samples.samples;
         std::vector<PointCloud::Ptr> pcl_clouds(samples.size());
@@ -342,7 +339,7 @@ protected:
             return true;
         }
 
-        if(!filter(out, request.samples.bin)) {
+        if(!filter(out, request.samples.order.bin)) {
             ROS_ERROR("Empty filtered pointcloud");
             response.result.status = ProcessedObject::EMPTY_POINTCLOUD;
             return true;

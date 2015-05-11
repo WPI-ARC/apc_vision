@@ -2,5 +2,5 @@ string bin
 ---
 int32 SUCCESS = 0
 
-Sample[] samples
+apc_msgs/Sample[] samples
 int32 status

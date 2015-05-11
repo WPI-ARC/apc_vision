@@ -20,6 +20,9 @@ find_package(Boost 1.46 REQUIRED COMPONENTS filesystem)
 ## Find PCL
 find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation)
 
+find_package(apc_msgs)
+find_package(moveit_msgs)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -54,19 +57,19 @@ find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  APCObject.msg
-  Sample.msg
-  SampleArray.msg
-  ProcessedObject.msg
-)
+#add_message_files(
+#  FILES
+#  APCObject.msg
+#  Sample.msg
+#  SampleArray.msg
+#  ProcessedObject.msg
+#)
 
 ## Generate services in the 'srv' folder
 add_service_files(
     FILES
-    SampleVision.srv
-    ProcessVision.srv
+    #SampleVision.srv
+    #ProcessVision.srv
     TakeSample.srv
     GetSamples.srv
     ProcessSamples.srv
@@ -84,6 +87,7 @@ generate_messages(
     DEPENDENCIES
     geometry_msgs
     sensor_msgs
+    apc_msgs
 )
 
 ###################################

@@ -1,4 +1,4 @@
-SampleArray samples
+apc_msgs/SampleArray samples
 ---
-ProcessedObject result
+apc_msgs/ProcessedObject result
 

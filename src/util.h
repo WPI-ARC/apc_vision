@@ -4,7 +4,15 @@
 #include "PointXYZRGB_ID.h"
 #include "PointXYZI_ID.h"
 
+//#define USE_XYZRGB_ID
+#define USE_XYZI_ID
+
+#if defined(USE_XYZRGB_ID)
 typedef PointXYZRGB_ID PointT;
+#elif defined(USE_XYZI_ID)
+typedef PointXYZI_ID PointT;
+#endif
+
 typedef pcl::PointCloud<PointT> PointCloud;
 
 void pc2_to_pcl(const sensor_msgs::PointCloud2& source, PointCloud& target);
