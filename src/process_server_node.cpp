@@ -83,6 +83,7 @@ struct PointCluster {
     float score;
     PointCloud::Ptr out;
     bool valid;
+    std::vector<float> dimensions;
 
     PointCluster() :
         rotation(Eigen::Matrix3f::Identity()),
@@ -400,16 +401,16 @@ protected:
 
             response.result.pose = posestamped.pose;
 
-            response.result.obb_extents.x = dims[0];
-            response.result.obb_extents.y = dims[1];
-            response.result.obb_extents.z = dims[2];
+            response.result.obb_extents.x = result->dimensions[0];
+            response.result.obb_extents.y = result->dimensions[1];
+            response.result.obb_extents.z = result->dimensions[2];
 
             pcl_to_pc2(*result->out, response.result.pointcloud);
             response.result.pointcloud.header.stamp = ros::Time::now();
             response.result.pointcloud.header.frame_id = shelf_frame;
 
             pose_pub.publish(response.result.pose);
-            showMarkers(result,dims);
+            showMarkers(result,result->dimensions);
         }
         pointcloud_pub.publish(out);
 
@@ -450,7 +451,8 @@ protected:
 
             PointT position;
             Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
-            float boundingBoxProbability = scoreBoundingBox(object, segment, position, rotation);
+            std::vector<float> obb_dims;
+            float boundingBoxProbability = scoreBoundingBox(object, segment, position, rotation, obb_dims);
             // TODO: Get actual number of objects
             float featureMatchProbability = scoreFeatureMatch(object, segment, cloud, 1);
 
@@ -462,6 +464,7 @@ protected:
                 cluster.score = score;
                 cluster.rotation = rotation;
                 cluster.position = position;
+                cluster.dimensions = obb_dims;
                 cluster.out = segment;
                 cluster.valid = true;
             }
@@ -502,7 +505,8 @@ protected:
         // Pointcloud segment
         PointCloud::Ptr segment,
         PointT& position,
-        Eigen::Matrix3f& rotation)
+        Eigen::Matrix3f& rotation,
+        std::vector<float>& obb_dims)
     {
         // Estimate OBB
         pcl::MomentOfInertiaEstimation <PointT> feature_extractor;
@@ -587,7 +591,7 @@ protected:
             }
         }
 
-        sensed_dims = known_dims;
+        obb_dims = new_dims;
         rotation = best_rotation * rotation;
 
         // Convert 'score' to a 'probability'
