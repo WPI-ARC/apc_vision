@@ -10,7 +10,7 @@
     </include>
 
     <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
-          args="-0.0141 0.07435 -0.130 0.244346095 3.22885912 -0.0959931089  /arm_left_link_7_t /camera_left_depth_optical_frame 100"/>
+          args="0.005 0.06935 -0.138 0.191986218 3.28121899 -0.13962634 /arm_left_link_7_t /camera_left_depth_optical_frame 100"/>
 
     <node name="sample_server" pkg="apc_vision" type="sample_server_node" output="screen" cwd="node"/>
     <node name="process_server" pkg="apc_vision" type="process_server_node" output="screen" cwd="node" args="$(arg config)"/>

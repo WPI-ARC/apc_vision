@@ -650,7 +650,7 @@ int main(int argc, char** argv) {
         (*iter)["size"] >> dimensions;
 
         std::vector<std::string> colors;
-        (*iter)["colors"] >> dimensions;
+        (*iter)["colors"] >> colors;
 
         config.calib[key] = ObjInfo(files, dimensions, colors);
     }
