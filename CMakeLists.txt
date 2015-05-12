@@ -20,6 +20,9 @@ find_package(Boost 1.46 REQUIRED COMPONENTS filesystem)
 ## Find PCL
 find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation)
 
+find_package(apc_msgs)
+find_package(moveit_msgs)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -54,16 +57,22 @@ find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  APCObject.msg
-)
+#add_message_files(
+#  FILES
+#  APCObject.msg
+#  Sample.msg
+#  SampleArray.msg
+#  ProcessedObject.msg
+#)
 
 ## Generate services in the 'srv' folder
 add_service_files(
     FILES
-    SampleVision.srv
-    ProcessVision.srv
+    #SampleVision.srv
+    #ProcessVision.srv
+    TakeSample.srv
+    GetSamples.srv
+    ProcessSamples.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -78,6 +87,7 @@ generate_messages(
     DEPENDENCIES
     geometry_msgs
     sensor_msgs
+    apc_msgs
 )
 
 ###################################
@@ -117,8 +127,10 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(apc_vision_node src/apc_vision_node.cpp src/ObjectRecognizer.cpp src/ObjectIDs.cpp src/ColorDetector.cpp)
-add_dependencies(apc_vision_node ${PROJECT_NAME}_gencpp)
+add_executable(sample_server_node src/sample_server_node.cpp src/ObjectIDs.cpp src/util.cpp)
+add_executable(process_server_node src/process_server_node.cpp src/ObjectRecognizer.cpp src/ColorDetector.cpp src/ObjectIDs.cpp src/util.cpp)
+add_dependencies(sample_server_node ${PROJECT_NAME}_gencpp)
+add_dependencies(process_server_node ${PROJECT_NAME}_gencpp)
 
 # add_executable(three_pose_capture src/three_pose_capture.cpp)
 # add_dependencies(
@@ -130,11 +142,18 @@ add_dependencies(apc_vision_node ${PROJECT_NAME}_gencpp)
 # add_dependencies(object_recognizer_node object_recognizer_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(apc_vision_node
+target_link_libraries(sample_server_node
   ${catkin_LIBRARIES}
   ${Boost_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+
+target_link_libraries(process_server_node
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
 
 # target_link_libraries(three_pose_capture
 #   ${catkin_LIBRARIES}

@@ -1,0 +1,6 @@
+string bin
+---
+int32 SUCCESS = 0
+
+apc_msgs/Sample[] samples
+int32 status
