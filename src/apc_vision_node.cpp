@@ -153,10 +153,13 @@ public:
     {
         left_sync.registerCallback(boost::bind(&VisionProcessor::process_left, this, _1, _2, _3));
         right_sync.registerCallback(boost::bind(&VisionProcessor::process_right, this, _1, _2, _3));
-
+        std::vector<std::string> objectList;
         for(Config::CalibMap::iterator it = config.calib.begin(); it != config.calib.end(); it++) {
             objDetectors[it->first] = ObjectRecognizer(it->second.calibFiles);
+            objectList.push_back(it->first);
         }
+
+        colorDetectors.Init(objectList);
     }
 
 protected:
@@ -195,6 +198,7 @@ protected:
 
     Config config;
     std::map<std::string, ObjectRecognizer> objDetectors;
+    ColorDetector colorDetectors;
 
     sensor_msgs::PointCloud2::ConstPtr lastPC_left;
     sensor_msgs::PointCloud2::ConstPtr lastUVC_left;

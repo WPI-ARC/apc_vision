@@ -32,7 +32,7 @@ private:
     int total_success;
 
 public:
-    ColorDetector(std::vector<std::string> objectNames);
+    void Init(std::vector<std::string> objectNames);
     ColorDetector();
     bool detect(std::string objectName, Mat src, Mat contoursrc, string color);
     map<string, HSV> HSVGenerator(std::string objectName);

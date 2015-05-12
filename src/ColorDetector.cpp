@@ -11,7 +11,7 @@ using namespace cv;
 using namespace std;
 
 
-ColorDetector::ColorDetector(std::vector<std::string> objectNames)
+void ColorDetector::Init(std::vector<std::string> objectNames)
 {
     for(std::vector<std::string>::iterator objectIterator = objectNames.begin(); objectIterator!=objectNames.end(); objectIterator++)
     {
@@ -21,6 +21,9 @@ ColorDetector::ColorDetector(std::vector<std::string> objectNames)
     }
     total_success = 0;
 }
+
+ColorDetector::ColorDetector()
+{}
 
 map<string,HSV> ColorDetector::HSVGenerator(std::string objectName)
 {
