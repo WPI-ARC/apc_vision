@@ -43,7 +43,7 @@ objects:
     sharpie_accent_tank_style_highlighters:
         files: []
         size: [0.023, 0.116, 0.125]
-	colors: ['orange', 'blue', 'green']
+        colors: ['orange', 'blue', 'green']
     stanley_66_052:
         files: []
         size: [0.02, 0.1, 0.195]
@@ -103,7 +103,7 @@ objects:
     test_object:
         files: []
         size: [0.0, 0.0, 0.0]
-	colors: []
+        colors: []
 shelf:
     A: [-0.43, -.01,  0.17764, 0.39,    1.55794, 1.77212]
     B: [-0.43, -.01, -0.12, 0.14331, 1.55794, 1.77212]
