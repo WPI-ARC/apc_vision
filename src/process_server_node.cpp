@@ -94,10 +94,20 @@ struct PointCluster {
     {}
 };
 
+// This function is used to find the point cluster with the 
+// best score (higher is better)
 bool bestScoreComparison(const PointCluster &a, const PointCluster &b)
 {
-    return a.score<b.score;
+    return a.score>b.score;
 }
+
+class DuplicateChecker {
+private:
+    std::string orig;
+public:
+    DuplicateChecker(std::string s) : orig(s) {}
+    bool operator()(std::string s) { return orig == s; }
+};
 
 class ProcessServer {
 public:
@@ -213,17 +223,17 @@ protected:
         return true;
     }
 
-    bool showMarkers(std::vector<PointCluster>::iterator result, std::vector<float> dims)
+    bool showMarkers(PointCluster result, std::vector<float> dims)
     {
-        Eigen::Quaternionf quaternion(result->rotation);
+        Eigen::Quaternionf quaternion(result.rotation);
         visualization_msgs::Marker marker;
         marker.header.frame_id = shelf_frame;
         marker.header.stamp = ros::Time(0);
         marker.type = visualization_msgs::Marker::CUBE;
         marker.action = visualization_msgs::Marker::ADD;
-        marker.pose.position.x = result->position.x;
-        marker.pose.position.y = result->position.y;
-        marker.pose.position.z = result->position.z;
+        marker.pose.position.x = result.position.x;
+        marker.pose.position.y = result.position.y;
+        marker.pose.position.z = result.position.z;
         marker.pose.orientation.x = quaternion.x();
         marker.pose.orientation.y = quaternion.y();
         marker.pose.orientation.z = quaternion.z();
@@ -373,15 +383,16 @@ protected:
         }
 
         PointCloud::Ptr out(new PointCloud);
-        std::vector<PointCluster> clusters;
         for(int i = 0 ; i < samples.size(); ++i) {
             if(!pcl_clouds[i]->points.size()) {
                 ROS_WARN("Empty pointcloud from sample %d\n", i);
                 continue;
             }
             // Run feature matching
-            feature_match(object, pcl_clouds[i], samples[i]);
-            detect_colors(object, pcl_clouds[i], samples[i], availableColors);
+            for(int j = 0; j < binContents.size(); ++j) {
+                feature_match(binContents[j], pcl_clouds[i], samples[i]);
+                detect_colors(binContents[j], pcl_clouds[i], samples[i], availableColors);
+            }
             // Use icp to match clouds
             if(i > 0) { align(pcl_clouds[i], pcl_clouds[0]); }
             // Combine sampled pointclouds.
@@ -400,7 +411,9 @@ protected:
             return true;
         }
 
-        clusters = segmentCloud(out, object);
+        DuplicateChecker pred(object);
+        std::remove_if(binContents.begin(), binContents.end(), pred);
+        std::vector<PointCluster> clusters = segmentCloud(out, object, binContents);
 
         if(config.calib.find(object) == config.calib.end()) {
             ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
@@ -414,11 +427,9 @@ protected:
             return true;
         }
 
-        // Get best cluster
-        //std::vector<PointCluster>::iterator result = std::min_element(clusters.begin(), clusters.end(), bestScoreComparison);
+        // Sort clusters from high to low score
         std::sort(clusters.begin(), clusters.end(), bestScoreComparison);
-        std::vector<PointCluster>::iterator result = clusters.begin();
-        if(clusters.end() == result)
+        if(clusters.size() == 0)
         {
             ROS_ERROR("Could not find best cluster");
             response.result.status = ProcessedObject::NO_OBJECTS_FOUND;
@@ -426,18 +437,20 @@ protected:
         }
         else
         {
-            if(!result->valid) {
+            PointCluster result = clusters[0];
+            if(!result.valid) {
                 ROS_ERROR("'Best' cluster was not valid");
                 response.result.status = ProcessedObject::NO_OBJECTS_FOUND;
+                return true;
             } else {
                 response.result.status = ProcessedObject::SUCCESS;
             }
 
             ros::Time stamp = ros::Time::now();
-            Eigen::Quaternionf quaternion(result->rotation);
-            response.result.pose.position.x = result->position.x;
-            response.result.pose.position.y = result->position.y;
-            response.result.pose.position.z = result->position.z;
+            Eigen::Quaternionf quaternion(result.rotation);
+            response.result.pose.position.x = result.position.x;
+            response.result.pose.position.y = result.position.y;
+            response.result.pose.position.z = result.position.z;
             response.result.pose.orientation.x = quaternion.x();
             response.result.pose.orientation.y = quaternion.y();
             response.result.pose.orientation.z = quaternion.z();
@@ -457,11 +470,11 @@ protected:
 
             response.result.pose = posestamped.pose;
 
-            response.result.obb_extents.x = result->dimensions[0];
-            response.result.obb_extents.y = result->dimensions[1];
-            response.result.obb_extents.z = result->dimensions[2];
+            response.result.obb_extents.x = result.dimensions[0];
+            response.result.obb_extents.y = result.dimensions[1];
+            response.result.obb_extents.z = result.dimensions[2];
 
-            pcl_to_pc2(*result->out, response.result.pointcloud);
+            pcl_to_pc2(*result.out, response.result.pointcloud);
             response.result.pointcloud.header.stamp = ros::Time::now();
             response.result.pointcloud.header.frame_id = shelf_frame;
 
@@ -475,7 +488,7 @@ protected:
             response.result.collision_cloud.header.frame_id = shelf_frame;
 
             pose_pub.publish(response.result.pose);
-            showMarkers(result,result->dimensions);
+            showMarkers(result,result.dimensions);
         }
         pointcloud_pub.publish(out);
 
@@ -483,7 +496,7 @@ protected:
         return true;
     }
 
-    std::vector<PointCluster> segmentCloud(PointCloud::Ptr cloud, std::string object)
+    std::vector<PointCluster> segmentCloud(PointCloud::Ptr cloud, std::string object, std::vector<std::string> others)
     {
         // ------------------------------
         // Cluster extraction
@@ -516,10 +529,16 @@ protected:
             Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
             std::vector<float> obb_dims;
             float boundingBoxProbability = scoreBoundingBox(object, segment, position, rotation, obb_dims);
-            // TODO: Get actual number of objects
-            float featureMatchProbability = scoreFeatureMatch(object, segment, cloud, 1);
+            float featureMatchProbability = scoreFeatureMatch(object, segment, cloud, 1.0);
+            float featureMatchWrongProbability = 1.0;
 
-            float score = boundingBoxProbability * featureMatchProbability;
+            // Factor in feature matching for non target objects
+            for(int j = 0; j < others.size(); ++j) {
+                featureMatchWrongProbability *= 1.0 - scoreFeatureMatch(others[j], segment, cloud, 0.0);
+            }
+
+
+            float score = boundingBoxProbability * featureMatchProbability * featureMatchWrongProbability;
             ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
 
             PointCluster cluster;
@@ -529,7 +548,7 @@ protected:
             cluster.dimensions = obb_dims;
             cluster.out = segment;
             cluster.valid = true;
-            clusters.push_back(cluster);
+            clusters[i] = cluster;
 
             i++;
         }
@@ -541,7 +560,7 @@ protected:
         std::string object,
         PointCloud::Ptr segment,
         PointCloud::Ptr cloud,
-        int num_objs)
+        float default_score)
     {
         int num_total_points = 0, num_segment_points = 0;
         uint64_t obj_id = string_to_id(object);
@@ -555,7 +574,7 @@ protected:
         }
 
         if(num_total_points == 0) {
-            return 1.0/num_objs;
+            return default_score;
         } else {
             return (float)num_segment_points / (float)num_total_points;
         }
