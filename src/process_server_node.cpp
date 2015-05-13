@@ -400,7 +400,7 @@ protected:
             return true;
         }
 
-        clusters.push_back(segmentCloud(out, object));
+        clusters = segmentCloud(out, object);
 
         if(config.calib.find(object) == config.calib.end()) {
             ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
@@ -415,7 +415,9 @@ protected:
         }
 
         // Get best cluster
-        std::vector<PointCluster>::iterator result = std::min_element(clusters.begin(), clusters.end(), bestScoreComparison);
+        //std::vector<PointCluster>::iterator result = std::min_element(clusters.begin(), clusters.end(), bestScoreComparison);
+        std::sort(clusters.begin(), clusters.end(), bestScoreComparison);
+        std::vector<PointCluster>::iterator result = clusters.begin();
         if(clusters.end() == result)
         {
             ROS_ERROR("Could not find best cluster");
@@ -463,6 +465,15 @@ protected:
             response.result.pointcloud.header.stamp = ros::Time::now();
             response.result.pointcloud.header.frame_id = shelf_frame;
 
+            PointCloud::Ptr collision(new PointCloud);
+            for(int i = 1; i < clusters.size(); ++i) {
+                *collision += *clusters[i].out;
+            }
+
+            pcl_to_pc2(*collision, response.result.collision_cloud);
+            response.result.collision_cloud.header.stamp = ros::Time::now();
+            response.result.collision_cloud.header.frame_id = shelf_frame;
+
             pose_pub.publish(response.result.pose);
             showMarkers(result,result->dimensions);
         }
@@ -472,7 +483,7 @@ protected:
         return true;
     }
 
-    PointCluster segmentCloud(PointCloud::Ptr cloud, std::string object)
+    std::vector<PointCluster> segmentCloud(PointCloud::Ptr cloud, std::string object)
     {
         // ------------------------------
         // Cluster extraction
@@ -491,9 +502,7 @@ protected:
         ec.extract (cluster_indices);
 
 
-        PointCluster cluster;
-        float best_score = 0.0;
-
+        std::vector<PointCluster> clusters(cluster_indices.size());
         int i = 0;
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
         {
@@ -513,20 +522,19 @@ protected:
             float score = boundingBoxProbability * featureMatchProbability;
             ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
 
-            if(score > best_score) {
-                best_score = score;
-                cluster.score = score;
-                cluster.rotation = rotation;
-                cluster.position = position;
-                cluster.dimensions = obb_dims;
-                cluster.out = segment;
-                cluster.valid = true;
-            }
+            PointCluster cluster;
+            cluster.score = score;
+            cluster.rotation = rotation;
+            cluster.position = position;
+            cluster.dimensions = obb_dims;
+            cluster.out = segment;
+            cluster.valid = true;
+            clusters.push_back(cluster);
 
             i++;
         }
 
-        return cluster;
+        return clusters;
     }
 
     float scoreFeatureMatch(
