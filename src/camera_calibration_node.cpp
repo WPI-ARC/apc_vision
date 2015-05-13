@@ -45,9 +45,10 @@ protected:
         lastImage_left = cv_bridge::toCvCopy(image, sensor_msgs::image_encodings::RGB8);
 
         std::vector<cv::Point2f> corners;
-        bool result = cv::findChessboardCorners(lastImage_left->image, cv::Size(6, 5), corners);
-        cv::drawChessboardCorners(lastImage_left->image, cv::Size(6, 5), corners, result);
+        bool result = cv::findChessboardCorners(lastImage_left->image, cv::Size(5, 4), corners);
+        cv::drawChessboardCorners(lastImage_left->image, cv::Size(5, 4), corners, result);
         cv::imshow("calibration", lastImage_left->image);
+        cv::waitKey(1);
     }
 
 public:
