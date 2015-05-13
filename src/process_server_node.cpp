@@ -96,7 +96,7 @@ struct PointCluster {
 
 bool bestScoreComparison(const PointCluster &a, const PointCluster &b)
 {
-    return a.score<b.score;
+    return a.score>b.score;
 }
 
 class ProcessServer {
@@ -322,7 +322,6 @@ protected:
         }
 
         PointCloud::Ptr out(new PointCloud);
-        std::vector<PointCluster> clusters;
         for(int i = 0 ; i < samples.size(); ++i) {
             if(!pcl_clouds[i]->points.size()) {
                 ROS_WARN("Empty pointcloud from sample %d\n", i);
@@ -348,7 +347,7 @@ protected:
             return true;
         }
 
-        clusters = segmentCloud(out, object);
+        std::vector<PointCluster> clusters = segmentCloud(out, object);
 
         if(config.calib.find(object) == config.calib.end()) {
             ROS_ERROR("Could not find calibration info for object `%s'", object.c_str());
@@ -365,8 +364,7 @@ protected:
         // Get best cluster
         //std::vector<PointCluster>::iterator result = std::min_element(clusters.begin(), clusters.end(), bestScoreComparison);
         std::sort(clusters.begin(), clusters.end(), bestScoreComparison);
-        std::vector<PointCluster>::iterator result = clusters.begin();
-        if(clusters.end() == result)
+        if(clusters.size() == 0)
         {
             ROS_ERROR("Could not find best cluster");
             response.result.status = ProcessedObject::NO_OBJECTS_FOUND;
@@ -374,9 +372,11 @@ protected:
         }
         else
         {
+            PointCluster *result = &clusters[0];
             if(!result->valid) {
                 ROS_ERROR("'Best' cluster was not valid");
                 response.result.status = ProcessedObject::NO_OBJECTS_FOUND;
+                return true;
             } else {
                 response.result.status = ProcessedObject::SUCCESS;
             }
@@ -423,7 +423,7 @@ protected:
             response.result.collision_cloud.header.frame_id = shelf_frame;
 
             pose_pub.publish(response.result.pose);
-            showMarkers(result,result->dimensions);
+            // showMarkers(result,result->dimensions);
         }
         pointcloud_pub.publish(out);
 
@@ -477,7 +477,7 @@ protected:
             cluster.dimensions = obb_dims;
             cluster.out = segment;
             cluster.valid = true;
-            clusters.push_back(cluster);
+            clusters[i] = cluster;
 
             i++;
         }

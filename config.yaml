@@ -9,7 +9,7 @@ objects:
         size: [0.095, 0.107, 0.145]
         colors: []
     crayola_64_ct:
-        files: []
+        files: ['images/crayola.jpg']
         size: [0.037, 0.125, 0.145]
         colors: ['yellow', 'green']
     expo_dry_erase_board_eraser:
