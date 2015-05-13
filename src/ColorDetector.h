@@ -34,6 +34,7 @@ private:
 public:
     void Init(std::vector<std::string> objectNames);
     ColorDetector();
-    bool detect(std::string objectName, Mat src, Mat contoursrc, string color);
+    bool detect(std::string objectName, Mat src, Mat contoursrc, string color, std::vector<std::vector<cv::Point2f> >& obj_bounds);
     map<string, HSV> HSVGenerator(std::string objectName);
+    map<string, Object> getObjectHSVs();
 };

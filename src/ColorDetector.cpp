@@ -25,6 +25,11 @@ void ColorDetector::Init(std::vector<std::string> objectNames)
 ColorDetector::ColorDetector()
 {}
 
+map<string, Object> ColorDetector::getObjectHSVs()
+{
+    return objectHSVs;
+}
+
 map<string,HSV> ColorDetector::HSVGenerator(std::string objectName)
 {
     map<string,HSV> hsvMap;
@@ -480,7 +485,7 @@ map<string,HSV> ColorDetector::HSVGenerator(std::string objectName)
 //        }
 
 
-bool ColorDetector::detect(std::string objectName, Mat src, Mat contoursrc, string colorName)
+bool ColorDetector::detect(std::string objectName, Mat src, Mat contoursrc, string colorName, std::vector<std::vector<cv::Point2f> >& obj_bounds)
 {
         if ( !src.data )
         {
@@ -548,6 +553,17 @@ bool ColorDetector::detect(std::string objectName, Mat src, Mat contoursrc, stri
             rectangle(contoursrc, bounding_rect,  Scalar(0,255,0),2, 8,0);
             drawContours( contoursrc, contours,largest_contour_index, color, CV_FILLED,8,hierarchy);
             rectangle(src, bounding_rect,  Scalar(0,255,0),2, 8,0);
+            vector<Point2f> corners;
+            Point2f tl = bounding_rect.tl();
+            Point2f br = bounding_rect.br();
+            Point2f tr (tl.x+bounding_rect.width, tl.y);
+            Point2f bl (tl.x, tl.y+bounding_rect.height);
+            corners.push_back(tl);
+            corners.push_back(tr);
+            corners.push_back(br);
+            corners.push_back(bl);
+
+            obj_bounds.push_back(corners);
 //            ROS_INFO("Color %s successfully detected", colorName);
             //cout<<"Detected color is: "<<selectedcolor<<endl;
             total_success++;
@@ -561,12 +577,12 @@ bool ColorDetector::detect(std::string objectName, Mat src, Mat contoursrc, stri
             return false;
         }
 
-        namedWindow( "Bounding Box", CV_WINDOW_AUTOSIZE );
-        imshow( "Bounding Box", src );
-        waitKey(1);
-        namedWindow( "Draw contour", CV_WINDOW_AUTOSIZE );
-        imshow( "Draw contour", contoursrc );
-        waitKey(1);
+//        namedWindow( "Bounding Box", CV_WINDOW_AUTOSIZE );
+//        imshow( "Bounding Box", src );
+//        waitKey(1);
+//        namedWindow( "Draw contour", CV_WINDOW_AUTOSIZE );
+//        imshow( "Draw contour", contoursrc );
+//        waitKey(1);
 
 }
 

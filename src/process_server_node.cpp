@@ -129,6 +129,7 @@ protected:
 
     Config config;
     std::map<std::string, ObjectRecognizer> objDetectors;
+
     ColorDetector colorDetectors;
 
     bool filter(PointCloud::Ptr cloud, std::string bin) {
@@ -299,6 +300,20 @@ protected:
             }
         }
     }
+    void detect_colors(std::string object, PointCloud::Ptr cloud, Sample& sample, std::vector<std::string> availableColors)
+    {
+        cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(sample.rgb, sensor_msgs::image_encodings::BGR8);
+        ROS_DEBUG("Converting index image to OpenCV for object `%s'", object.c_str());
+        cv_bridge::CvImagePtr contour_ptr = cv_bridge::toCvCopy(sample.rgb, sensor_msgs::image_encodings::BGR8);
+        std::vector<std::vector<cv::Point2f> > obj_bounds;
+        for(int i = 0; i < availableColors.size(); i++)
+        {
+            //TODO colors need scoring
+            if(colorDetectors.detect(object, img_ptr->image, contour_ptr->image, availableColors[i], obj_bounds))
+                ROS_DEBUG("Detected color %s", availableColors[i].c_str());
+        }
+
+    }
 
     // Use ICP to align two pointclouds
     void align(PointCloud::Ptr source, PointCloud::Ptr target) {
@@ -350,7 +365,7 @@ protected:
         std::vector<float> dims = config.calib[object].dimensions;
         std::vector<Sample>& samples = request.samples.samples;
         std::vector<PointCloud::Ptr> pcl_clouds(samples.size());
-        std::vector<std::string> colors = findColors(object, binContents);
+        std::vector<std::string> availableColors = findColors(object, binContents);
         for(int i = 0; i < samples.size(); ++i) {
             PointCloud::Ptr cloud(new PointCloud);
             pc2_to_pcl(samples[i].cloud, *cloud);
@@ -366,6 +381,7 @@ protected:
             }
             // Run feature matching
             feature_match(object, pcl_clouds[i], samples[i]);
+            detect_colors(object, pcl_clouds[i], samples[i], availableColors);
             // Use icp to match clouds
             if(i > 0) { align(pcl_clouds[i], pcl_clouds[0]); }
             // Combine sampled pointclouds.
