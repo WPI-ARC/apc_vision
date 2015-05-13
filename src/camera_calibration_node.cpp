@@ -44,11 +44,39 @@ protected:
     void left_image_cb(const sensor_msgs::ImageConstPtr& image) {
         lastImage_left = cv_bridge::toCvCopy(image, sensor_msgs::image_encodings::RGB8);
 
-        std::vector<cv::Point2f> corners;
-        bool result = cv::findChessboardCorners(lastImage_left->image, cv::Size(5, 4), corners);
-        cv::drawChessboardCorners(lastImage_left->image, cv::Size(5, 4), corners, result);
+        std::vector<cv::Point2f> detected_points;
+        std::vector<cv::Point3f> pattern_points;
+        std::vector<std::vector<float> > tvecs;
+        std::vector<std::vector<float> > rvecs;
+        cv::Mat cameraMatrix;
+        cv::Mat distCoeffs;
+        float square_width = 0.0245;
+        for(int j = 0; j < 4; ++j) {
+            for(int i = 0; i < 5; ++i) {
+                pattern_points.push_back(cv::Point3f(i*square_width, j*square_width, 0.0));
+            }
+        }
+
+        std::vector<std::vector<cv::Point2f> > im_points;
+        im_points.push_back(detected_points);
+        std::vector<std::vector<cv::Point3f> > obj_points;
+        obj_points.push_back(pattern_points);
+
+        bool result = cv::findChessboardCorners(lastImage_left->image, cv::Size(5, 4), detected_points);
+        cv::calibrateCamera(im_points, obj_points, lastImage_left->image.size(), cameraMatrix, distCoeffs, rvecs, tvecs);
+
+        cv::drawChessboardCorners(lastImage_left->image, cv::Size(5, 4), detected_points, result);
         cv::imshow("calibration", lastImage_left->image);
-        cv::waitKey(1);
+
+        cv::FileStorage fs("camera_calib.yaml", cv::FileStorage::WRITE);
+
+        fs << "cameraMatrix" << cameraMatrix;
+        fs << "distCoeffs" << distCoeffs;
+        fs << "rvecs" << rvecs;
+        fs << "tvecs" << tvecs;
+        fs.release();
+
+        cv::waitKey(0);
     }
 
 public:
