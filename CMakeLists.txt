@@ -129,8 +129,10 @@ include_directories(
 ## Declare a cpp executable
 add_executable(sample_server_node src/sample_server_node.cpp src/ObjectIDs.cpp src/util.cpp)
 add_executable(process_server_node src/process_server_node.cpp src/ObjectRecognizer.cpp src/ColorDetector.cpp src/ObjectIDs.cpp src/util.cpp)
+add_executable(camera_calibration_node src/camera_calibration_node.cpp)
 add_dependencies(sample_server_node ${PROJECT_NAME}_gencpp)
 add_dependencies(process_server_node ${PROJECT_NAME}_gencpp)
+
 
 # add_executable(three_pose_capture src/three_pose_capture.cpp)
 # add_dependencies(
@@ -154,6 +156,11 @@ target_link_libraries(process_server_node
   ${PCL_LIBRARIES}
 )
 
+target_link_libraries(camera_calibration_node
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
 
 # target_link_libraries(three_pose_capture
 #   ${catkin_LIBRARIES}
