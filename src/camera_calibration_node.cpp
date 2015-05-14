@@ -7,8 +7,8 @@
 // Eigen
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Geometry>
+#include <Eigen/StdVector>
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3d)
 // OpenCV
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -18,6 +18,10 @@
 #include <cv_bridge/cv_bridge.h>
 // Image encodings
 #include <sensor_msgs/image_encodings.h>
+
+#include <iostream>
+
+
 
 // Camera topic names
 #if defined(USE_XYZRGB_ID)
@@ -38,7 +42,7 @@ public:
     Calibrator(ros::NodeHandle& nh) :
         left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this))
     {}
-
+EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 protected:
     ros::Subscriber left_image_sub;
     boost::mutex image_mutex;
@@ -85,17 +89,19 @@ public:
             cv::imshow("calibration", lastImage_left->image);
         } else {
             ROS_WARN("Could not detect entire checkerboard in this image. Skipping");
+            cv::imshow("calibration", lastImage_left->image);
         }
 
         cv::waitKey(0);
     }
 
     void calibrate() {
-        std::vector<cv::Point3f> pattern_points;
+        std::vector<cv::Point3f> points;
+        std::vector<std::vector<cv::Point3f> > pattern_points;
         float square_width = 0.0245;
         for(int j = 0; j < 4; ++j) {
             for(int i = 0; i < 5; ++i) {
-                pattern_points.push_back(cv::Point3f(i*square_width, j*square_width, 0.0));
+                points.push_back(cv::Point3f(i*square_width, j*square_width, 0.0));
             }
         }
 
@@ -105,21 +111,39 @@ public:
             take_sample();
         }
         */
+        take_sample();
+
+        for(int i = 0; i < image_points.size(); ++i) {
+            pattern_points.push_back(points);
+        }
 
         cv::Mat cameraMatrix;
         cv::Mat distCoeffs;
-        std::vector<cv::Mat_<double> > rotations;
-        std::vector<cv::Mat_<double> > translations;
+        //std::vector<cv::Mat_<double> > rotations;
+        //std::vector<cv::Mat_<double> > translations;
+        std::vector<cv::Mat> rotations;
+        std::vector<cv::Mat> translations;
         std::vector<Eigen::Affine3d> transforms;
 
         cv::calibrateCamera(pattern_points, image_points, lastImage_left->image.size(), cameraMatrix, distCoeffs, rotations, translations);
 
+        if(rotations.size() != translations.size()) {
+            ROS_ERROR("Number of rotations and translations differ");
+            return;
+        }
+
+        if(rotations.size() <= 0) {
+            ROS_ERROR("No samples taken.");
+            return;
+        }
+
         for(int i = 0; i < rotations.size(); ++i) {
             cv::Rodrigues(rotations[i], rotations[i]);
-            Eigen::Translation3d translation(translations[i].at<double>(0), translations[i].at<double>(0), translations[i].at<double>(0));
+            Eigen::Translation3d translation(translations[i].at<double>(0), translations[i].at<double>(1), translations[i].at<double>(2));
             Eigen::Map<Eigen::Matrix3d> rotation((double*)rotations[i].data);
             Eigen::Affine3d transform = rotation*translation;
             transforms.push_back(transform);
+            std::cout << "Transform: " << transform.matrix() << std::endl;
         }
 
 
@@ -139,9 +163,8 @@ int main(int argc, char** argv) {
     ros::AsyncSpinner spinner(1);
     spinner.start();
 
-    sleep(1);
-
     Calibrator calibrator(nh);
+    sleep(1);
     calibrator.calibrate();
 
     spinner.stop();
