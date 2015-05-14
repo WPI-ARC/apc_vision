@@ -11,6 +11,7 @@
 #include <pcl/point_types.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/statistical_outlier_removal.h>
@@ -474,7 +475,16 @@ protected:
             response.result.obb_extents.y = result.dimensions[1];
             response.result.obb_extents.z = result.dimensions[2];
 
+            ROS_INFO("%zd points before VoxelGrid filter", result.out->points.size());
+
+            PointCloud::Ptr voxelized(new PointCloud);
+            pcl::VoxelGrid<PointT> voxelizer;
+            voxelizer.setInputCloud(result.out);
+            voxelizer.setLeafSize(0.01f, 0.01f, 0.01f);
+            voxelizer.filter(*voxelized);
+            ROS_INFO("%zd points after VoxelGrid filter", voxelized->points.size());
             pcl_to_pc2(*result.out, response.result.pointcloud);
+            pcl_to_pc2(*voxelized, response.result.voxelcloud);
             response.result.pointcloud.header.stamp = ros::Time::now();
             response.result.pointcloud.header.frame_id = shelf_frame;
 
