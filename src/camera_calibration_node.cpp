@@ -8,6 +8,9 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <Eigen/StdVector>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Geometry>
+#include <eigen3/Eigen/StdVector>
 EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3d)
 // OpenCV
 #include <opencv2/imgproc/imgproc.hpp>
@@ -145,33 +148,68 @@ public:
             return;
         }
 
-        Eigen::Affine3d base_checker_tf(Eigen::Translation3d((0.276+0.0245), (0.589-0.0245), 0.004));
+        Eigen::Affine3d base_checker_tf(Eigen::Translation3d(0.276+0.0245, 0.589-0.0245, 0.004));
 
-        for(int i = 0; i < rotations.size(); ++i) {
+        int numPoints = translations.size();
+
+        Eigen::Matrix3Xd pointsTool;
+        Eigen::Matrix3Xd pointsCam;
+
+        pointsTool.resize(3, numPoints);
+        pointsCam.resize(3, numPoints);
+
+        Eigen::Vector3d tool_points_centroid = Eigen::Vector3d::Zero();
+        Eigen::Vector3d cam_points_centroid = Eigen::Vector3d::Zero();
+
+        for(int i = 0; i < numPoints; ++i) {
+            // Turn Opencv Rotation vector into a rotation matrix
             cv::Mat_<double> rotMat;
             cv::Rodrigues(rotations[i], rotMat);
-            rotations[i] = rotMat;
-            Eigen::Translation3d translation(translations[i].at<double>(0), translations[i].at<double>(1), translations[i].at<double>(2));
+            // OpenCV matrices are row major (Eigen defaults to column major)
             Eigen::Map<Eigen::Matrix<double, 3,3, Eigen::RowMajor> > rotation((double*)rotMat.data);
-            Eigen::Affine3d cam_checker_tf = translation*rotation;
-            Eigen::Affine3d checker_cam_tf = cam_checker_tf.inverse();
+            // Turn OpenCV translation vector into a translation matrix
+            Eigen::Translation3d translation(
+                    translations[i].at<double>(0),
+                    translations[i].at<double>(1),
+                    translations[i].at<double>(2));
+            // We want the inverse, since opencv gives us the trasform from the camera to the checkerboard
+            // and we really want the transform from the checkerboard to the camera
+            Eigen::Affine3d checker_cam_tf = (translation*rotation).inverse();
             cam_checker_tfs.push_back(checker_cam_tf);
-            //Eigen::Affine3d tool_camera_tf = checker_cam_tf*base_checker_tf*tool_base_tfs[i];
+            // Compute the transform from the tool frame to the camera frame
             Eigen::Affine3d tool_camera_tf = tool_base_tfs[i]*base_checker_tf*checker_cam_tf;
-            std::cout << (tool_base_tfs[i]*base_checker_tf).matrix() << std::endl;
-            std::cout << std::endl;
-            std::cout << checker_cam_tf.matrix() << std::endl;
-            std::cout << std::endl;
-            std::cout << base_checker_tf.matrix() << std::endl;
-            std::cout << std::endl;
-            std::cout << tool_base_tfs[i].matrix() << std::endl;
-            std::cout << std::endl;
-            std::cout << tool_camera_tf.matrix() << std::endl;
-            std::cout << std::endl;
-            std::cout << std::endl;
+            std::cout << tool_camera_tf.matrix() << std::endl << std::endl;
+
+            pointsTool.col(i) = tool_base_tfs[i]*base_checker_tf*Eigen::Vector3d(0.0, 0.0, 0.0);
+            pointsCam.col(i)  = checker_cam_tf.inverse()*Eigen::Vector3d(0.0, 0.0, 0.0);
+
+            tool_points_centroid += pointsTool.col(i);
+            cam_points_centroid += pointsCam.col(i);
         }
 
+        tool_points_centroid /= numPoints;
+        cam_points_centroid /= numPoints;
 
+        for(int i = 0; i < numPoints; ++i) {
+            pointsTool.col(i) -= tool_points_centroid;
+            pointsCam.col(i) -= cam_points_centroid;
+        }
+
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(pointsTool*pointsCam.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
+
+        double d = (svd.matrixV() * svd.matrixU().transpose()).determinant() > 0.0 ? 1.0 : -1.0;
+        I(2,2) = d;
+
+        Eigen::Matrix3d rotation = svd.matrixV() * I * svd.matrixU().transpose();
+        Eigen::Affine3d bestTransform = Eigen::Translation3d(cam_points_centroid - rotation*tool_points_centroid) * rotation;
+        //bestTransform.rotation() = rotation;
+        //bestTransform.translation() = cam_points_centroid - rotation*tool_points_centroid;
+
+        std::cout << std::endl;
+        std::cout << "Best transform:" << std::endl;
+        std::cout << bestTransform.matrix();
+        std::cout << std::endl;
 
         cv::FileStorage fs("camera_calib.yaml", cv::FileStorage::WRITE);
         fs << "cameraMatrix" << cameraMatrix;
