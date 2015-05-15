@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <iostream>
+#include <ros/ros.h>
 
 ObjectRecognizer::ObjectRecognizer() {
     detector = cv::FeatureDetector::create("ORB");
@@ -28,6 +29,11 @@ ObjectRecognizer::ObjectRecognizer(std::vector<std::string> calib_image_names) {
     for(int i = 0; i < calib_image_names.size(); i++) {
         // Read calibration image
         cv::Mat calib_img = cv::imread(calib_image_names[i], CV_LOAD_IMAGE_COLOR);
+
+        if(calib_img.data == NULL) {
+            ROS_ERROR("Could not load calibration image `%s'", calib_image_names[i].c_str());
+            continue;
+        }
         
         cv::Mat_<unsigned char> calib_gray(calib_img.size());
         cv::cvtColor(calib_img, calib_gray, CV_BGR2GRAY);
