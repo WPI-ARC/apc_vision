@@ -113,23 +113,23 @@ public:
             if(!success) {
                 ROS_ERROR("Couldn't look up camera to shelf transform!");
                 return;
-        }
-        // Otherwise, get the transform
-        listener.lookupTransform(tool_frame, base_frame, stamp, transform);
-        // Get an eigen transform from the tf one
-        tf::transformTFToEigen(transform, tool_base_tf);
+            }
+            // Otherwise, get the transform
+            listener.lookupTransform(tool_frame, base_frame, stamp, transform);
+            // Get an eigen transform from the tf one
+            tf::transformTFToEigen(transform, tool_base_tf);
 
-        if(cv::findChessboardCorners(lastImage_left->image, cv::Size(5, 4), detected_points)) {
-            cv::circle(lastImage_left->image, detected_points[0], 10, cv::Scalar(0, 255, 0));
-            tool_base_tfs.push_back(tool_base_tf);
-            image_points.push_back(detected_points);
+            if(cv::findChessboardCorners(lastImage_left->image, cv::Size(5, 4), detected_points)) {
+                cv::circle(lastImage_left->image, detected_points[0], 10, cv::Scalar(0, 255, 0));
+                tool_base_tfs.push_back(tool_base_tf);
+                image_points.push_back(detected_points);
 
-            cv::drawChessboardCorners(lastImage_left->image, cv::Size(5, 4), detected_points, true);
-            cv::imshow("calibration", lastImage_left->image);
-        } else {
-            ROS_WARN("Could not detect entire checkerboard in this image. Skipping");
-            cv::imshow("calibration", lastImage_left->image);
-        }
+                cv::drawChessboardCorners(lastImage_left->image, cv::Size(5, 4), detected_points, true);
+                cv::imshow("calibration", lastImage_left->image);
+            } else {
+                ROS_WARN("Could not detect entire checkerboard in this image. Skipping");
+                cv::imshow("calibration", lastImage_left->image);
+            }
         }
 
         cv::waitKey(0);
