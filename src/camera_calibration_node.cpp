@@ -42,11 +42,12 @@ const static std::string tool_frame = "/arm_left_link_tool0";
 
 class Calibrator {
 public:
-    Calibrator(ros::NodeHandle& nh) :
-        left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this))
+    Calibrator(ros::NodeHandle& nh, std::string filename) :
+        filename(filename), left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this))
     {}
 EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 protected:
+    std::string filename;
     ros::Subscriber left_image_sub;
     boost::mutex image_mutex;
     tf::TransformListener listener;
@@ -202,20 +203,30 @@ public:
         I(2,2) = d;
 
         Eigen::Matrix3d rotation = svd.matrixV() * I * svd.matrixU().transpose();
-        Eigen::Affine3d bestTransform = Eigen::Translation3d(cam_points_centroid - rotation*tool_points_centroid) * rotation;
+
+        Eigen::Quaterniond quaternion(rotation);
+        Eigen::Vector3d translation(cam_points_centroid - rotation*tool_points_centroid);
+        Eigen::Affine3d bestTransform = Eigen::Translation3d(translation) * rotation;
+        std::cout << "\nBest Transform\n" << bestTransform.matrix() << std::endl;
         //bestTransform.rotation() = rotation;
         //bestTransform.translation() = cam_points_centroid - rotation*tool_points_centroid;
 
-        std::cout << std::endl;
-        std::cout << "Best transform:" << std::endl;
-        std::cout << bestTransform.matrix();
-        std::cout << std::endl;
-
-        cv::FileStorage fs("camera_calib.yaml", cv::FileStorage::WRITE);
+        cv::FileStorage fs(filename, cv::FileStorage::WRITE);
         fs << "cameraMatrix" << cameraMatrix;
         fs << "distCoeffs" << distCoeffs;
-        fs << "rvecs" << rotations;
-        fs << "tvecs" << translations;
+        fs << "camera_transform" << "{"
+               << "position" <<"{"
+                   << "x" << translation.x()
+                   << "y" << translation.y()
+                   << "z" << translation.z()
+               << "}"
+               << "orientation" << "{"
+                   << "x" << quaternion.x()
+                   << "y" << quaternion.y()
+                   << "z" << quaternion.z()
+                   << "w" << quaternion.w()
+               << "}"
+           << "}";
         fs.release();
     }
 };
@@ -224,10 +235,13 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "camera_calibration_node");
     ros::NodeHandle nh;
 
+    std::string filename;
+    nh.getParam("apc_vision/camera_calib", filename);
+
     ros::AsyncSpinner spinner(1);
     spinner.start();
 
-    Calibrator calibrator(nh);
+    Calibrator calibrator(nh, filename);
     sleep(1);
     calibrator.calibrate();
 

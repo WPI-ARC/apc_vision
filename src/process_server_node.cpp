@@ -696,12 +696,10 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "object_segmentation");
     ros::NodeHandle nh;
 
-    if(argc <= 1) {
-        printf("Please provide config file location");
-        return -1;
-    }
+    std::string config_string;
+    nh.getParam("apc_vision/config", config_string);
 
-    boost::filesystem::path config_path(argv[1]);
+    boost::filesystem::path config_path(config_string);
 
     std::cout << boost::filesystem::absolute(config_path).string() << std::endl;
 
