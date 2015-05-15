@@ -483,7 +483,8 @@ protected:
             voxelizer.setLeafSize(0.01f, 0.01f, 0.01f);
             voxelizer.filter(*voxelized);
             ROS_INFO("%zd points after VoxelGrid filter", voxelized->points.size());
-            pcl_to_pc2(*result.out, response.result.pointcloud);
+            //pcl_to_pc2(*result.out, response.result.pointcloud);
+            pcl_to_pc2(*voxelized, response.result.pointcloud);
             pcl_to_pc2(*voxelized, response.result.voxelcloud);
             response.result.pointcloud.header.stamp = ros::Time::now();
             response.result.pointcloud.header.frame_id = shelf_frame;
