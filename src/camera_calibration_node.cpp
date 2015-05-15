@@ -22,6 +22,8 @@ EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3d)
 // Image encodings
 #include <sensor_msgs/image_encodings.h>
 
+#include <XmlRpcValue.h>
+
 #include <iostream>
 
 
@@ -196,7 +198,7 @@ public:
             pointsCam.col(i) -= cam_points_centroid;
         }
 
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(pointsTool*pointsCam.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(pointsCam*pointsTool.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
         Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
 
         double d = (svd.matrixV() * svd.matrixU().transpose()).determinant() > 0.0 ? 1.0 : -1.0;
@@ -205,7 +207,7 @@ public:
         Eigen::Matrix3d rotation = svd.matrixV() * I * svd.matrixU().transpose();
 
         Eigen::Quaterniond quaternion(rotation);
-        Eigen::Vector3d translation(cam_points_centroid - rotation*tool_points_centroid);
+        Eigen::Vector3d translation(tool_points_centroid - rotation*cam_points_centroid);
         Eigen::Affine3d bestTransform = Eigen::Translation3d(translation) * rotation;
         std::cout << "\nBest Transform\n" << bestTransform.matrix() << std::endl;
         //bestTransform.rotation() = rotation;
@@ -233,10 +235,17 @@ public:
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "camera_calibration_node");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh("~");
 
     std::string filename;
-    nh.getParam("apc_vision/camera_calib", filename);
+    XmlRpc::XmlRpcValue pose_config;
+    std::vector<geometry_msgs::Pose> poses;
+    nh.getParam("camera_calib", filename);
+    nh.getParam("calib_poses", pose_config);
+
+    ROS_ASSERT(pose_config.getType() == XmlRpc::XmlRpcValue::TypeArray);
+    for(int i = 0; i < pose_config.size(); ++i) {
+    }
 
     ros::AsyncSpinner spinner(1);
     spinner.start();

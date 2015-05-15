@@ -3,12 +3,14 @@
     <arg name="camera_calib" value="$(find apc_vision)/config/camera_calib.yaml"/>
 
     <param name="apc_vision/config" value="$(find apc_vision)/config/config.yaml"/>
-    <param name="apc_vision/camera_calib" value="$(arg camera_calib)"/>
+    <rosparam ns="camera_calibration_node" name="camera_calib" subst_value="True">$(arg camera_calib)</rosparam>
     <rosparam command="load" file="$(arg camera_calib)"/>
+    <rosparam ns="camera_calibration_node" command="load" file="$(find apc_vision)/config/calib_poses.yaml"/>
 
     <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
         <arg name="camera_name" value="camera_left"/>
-        <arg name="device_serial_number" value="K8VF0780347000071P"/>
+        <!--<arg name="device_serial_number" value="K8VF0780347000071P"/>-->
+        <arg name="device_serial_number" value="K8VF0780404000181V"/>
         <arg name="confidence_threshold" value="100"/>
         <arg name="rgb_resolution" value="WXGA_H"/>
     </include>
