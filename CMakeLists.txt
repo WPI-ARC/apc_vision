@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf_conversions
   cv_bridge
   message_generation
+  moveit_ros_planning_interface
 )
 
 find_package(Boost 1.46 REQUIRED COMPONENTS filesystem)
@@ -22,6 +23,7 @@ find_package(PCL 1.7 REQUIRED common features kdtree search filters segmentation
 
 find_package(apc_msgs)
 find_package(moveit_msgs)
+find_package(moveit_ros_planning_interface)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -102,7 +104,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES object_recognizer
-#  CATKIN_DEPENDS cv_bridge
+   CATKIN_DEPENDS moveit_ros_planning_interface
 #  DEPENDS system_lib
 )
 

@@ -23,8 +23,11 @@ EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3d)
 #include <sensor_msgs/image_encodings.h>
 
 #include <XmlRpcValue.h>
+#include <moveit/move_group_interface/move_group.h>
 
 #include <iostream>
+
+#include <motoman_moveit/convert_trajectory_server.h>
 
 
 
@@ -44,16 +47,22 @@ const static std::string tool_frame = "/arm_left_link_tool0";
 
 class Calibrator {
 public:
-    Calibrator(ros::NodeHandle& nh, std::string filename) :
-        filename(filename), left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this))
-    {}
+    Calibrator(ros::NodeHandle& nh, std::string filename, std::vector<geometry_msgs::Pose> poses) :
+        filename(filename), poses(poses), arm("arm_left_torso"),
+        left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this))
+    {
+        arm.setPlannerId("RRTConnectkConfigDefault");
+        arm.setPlanningTime(5.0);
+    }
 EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 protected:
+    moveit::planning_interface::MoveGroup arm;
     std::string filename;
     ros::Subscriber left_image_sub;
     boost::mutex image_mutex;
     tf::TransformListener listener;
 
+    std::vector<geometry_msgs::Pose> poses;
     std::vector<Eigen::Affine3d> tool_base_tfs;
     std::vector<std::vector<cv::Point2f> > image_points;
 
@@ -66,22 +75,40 @@ protected:
     }
 
 public:
+    void goto_pose(geometry_msgs::Pose pose) {
+        moveit::planning_interface::MoveGroup::Plan plan;
+        arm.setPoseTarget(pose);
+
+        if(!arm.plan(plan)) {
+            ROS_ERROR("Failed to find plan!");
+            return;
+        }
+
+        motoman_moveit::convert_trajectory_server move;
+        move.request.jointTraj = plan.trajectory_.joint_trajectory;
+        ros::service::call("convert_trajectory_service", move);
+
+        if(!move.response.success) {
+            ROS_ERROR("Failed to execute plan!");
+        }
+    }
+
     void take_sample() {
         {
-        // Lock the image
-        boost::mutex::scoped_lock lock(image_mutex);
+            // Lock the image
+            boost::mutex::scoped_lock lock(image_mutex);
 
-        ros::Time stamp = ros::Time::now();
-        std::vector<cv::Point2f> detected_points;
-        tf::StampedTransform transform;
-        Eigen::Affine3d tool_base_tf;
+            ros::Time stamp = ros::Time::now();
+            std::vector<cv::Point2f> detected_points;
+            tf::StampedTransform transform;
+            Eigen::Affine3d tool_base_tf;
 
-        // Wait for tool->base transform (2 sec)
-        bool success = listener.waitForTransform(tool_frame, base_frame, stamp, ros::Duration(2.0));
-        // If transform isn't found in that time, give up
-        if(!success) {
-            ROS_ERROR("Couldn't look up camera to shelf transform!");
-            return;
+            // Wait for tool->base transform (2 sec)
+            bool success = listener.waitForTransform(tool_frame, base_frame, stamp, ros::Duration(2.0));
+            // If transform isn't found in that time, give up
+            if(!success) {
+                ROS_ERROR("Couldn't look up camera to shelf transform!");
+                return;
         }
         // Otherwise, get the transform
         listener.lookupTransform(tool_frame, base_frame, stamp, transform);
@@ -114,18 +141,10 @@ public:
             }
         }
 
-        /*
         for(int i = 0; i < poses.size(); ++i) {
             goto_pose(poses[i]);
             take_sample();
         }
-        */
-        take_sample();
-        take_sample();
-        take_sample();
-        take_sample();
-        take_sample();
-        take_sample();
 
         for(int i = 0; i < image_points.size(); ++i) {
             pattern_points.push_back(points);
@@ -214,8 +233,8 @@ public:
         //bestTransform.translation() = cam_points_centroid - rotation*tool_points_centroid;
 
         cv::FileStorage fs(filename, cv::FileStorage::WRITE);
-        fs << "cameraMatrix" << cameraMatrix;
-        fs << "distCoeffs" << distCoeffs;
+        //fs << "cameraMatrix" << cameraMatrix;
+        //fs << "distCoeffs" << distCoeffs;
         fs << "camera_transform" << "{"
                << "position" <<"{"
                    << "x" << translation.x()
@@ -243,14 +262,45 @@ int main(int argc, char** argv) {
     nh.getParam("camera_calib", filename);
     nh.getParam("calib_poses", pose_config);
 
+    // Read in list of poses
     ROS_ASSERT(pose_config.getType() == XmlRpc::XmlRpcValue::TypeArray);
     for(int i = 0; i < pose_config.size(); ++i) {
+        XmlRpc::XmlRpcValue pose = pose_config[i];
+        ROS_ASSERT(pose.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+        XmlRpc::XmlRpcValue orientation = pose["orientation"];
+        XmlRpc::XmlRpcValue position = pose["position"];
+        ROS_ASSERT(orientation.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+        ROS_ASSERT(position.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+        XmlRpc::XmlRpcValue tx = position["x"];
+        ROS_ASSERT(tx.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        XmlRpc::XmlRpcValue ty = position["y"];
+        ROS_ASSERT(ty.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        XmlRpc::XmlRpcValue tz = position["z"];
+        ROS_ASSERT(tz.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        XmlRpc::XmlRpcValue rx = orientation["x"];
+        ROS_ASSERT(rx.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        XmlRpc::XmlRpcValue ry = orientation["y"];
+        ROS_ASSERT(ry.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        XmlRpc::XmlRpcValue rz = orientation["z"];
+        ROS_ASSERT(rz.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        XmlRpc::XmlRpcValue rw = orientation["w"];
+        ROS_ASSERT(rw.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+
+        geometry_msgs::Pose p;
+        p.position.x = static_cast<double>(tx);
+        p.position.y = static_cast<double>(ty);
+        p.position.z = static_cast<double>(tz);
+        p.orientation.x = static_cast<double>(rx);
+        p.orientation.y = static_cast<double>(ry);
+        p.orientation.z = static_cast<double>(rz);
+        p.orientation.w = static_cast<double>(rw);
+        poses.push_back(p);
     }
 
     ros::AsyncSpinner spinner(1);
     spinner.start();
 
-    Calibrator calibrator(nh, filename);
+    Calibrator calibrator(nh, filename, poses);
     sleep(1);
     calibrator.calibrate();
 
