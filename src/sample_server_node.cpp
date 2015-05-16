@@ -18,6 +18,8 @@
 #include "apc_msgs/Sample.h"
 #include "apc_vision/TakeSample.h"
 #include "apc_vision/GetSamples.h"
+// Time
+#include <ctime>
 // Util
 #include "util.h"
 
@@ -135,6 +137,9 @@ protected:
 
             samples[request.bin].push_back(sample);
             response.status = TakeSample::Response::SUCCESS;
+
+            std::string filename = "sample_" + request.bin + get_time_str() + ".bin";
+            serialze_msg(sample, filename);
         } else {
             response.status = TakeSample::Response::INVALID_COMMAND;
         }
