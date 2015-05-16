@@ -164,9 +164,11 @@ protected:
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "sample_server_node");
-    ros::NodeHandle nh("~");
+    ros::NodeHandle nh;
     std::string vision_dir;
-    nh.getParam("vision_dir", vision_dir);
+    nh.getParam("/sample_server_node/vision_dir", vision_dir);
+
+    ROS_INFO("Vision Directory = %s", vision_dir.c_str());
 
     SampleServer server(nh, vision_dir);
 

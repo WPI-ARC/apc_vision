@@ -2,7 +2,7 @@
 <launch>
     <arg name="camera_calib" value="$(find apc_vision)/config/camera_calib.yaml"/>
 
-    <rosparam ns="sample_server_node" subst_value="True">$(find apc_vision)</rosparam>
+    <rosparam ns="sample_server_node" param="vision_dir" subst_value="True">$(find apc_vision)</rosparam>
     <rosparam ns="camera_calibration_node" command="load" file="$(find apc_vision)/config/offset.yaml"/>
     <rosparam param="apc_vision/config" subst_value="True">$(find apc_vision)/config/config.yaml</rosparam>
     <rosparam ns="camera_calibration_node" param="camera_calib" subst_value="True">$(arg camera_calib)</rosparam>
