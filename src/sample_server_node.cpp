@@ -140,7 +140,7 @@ protected:
             samples[request.bin].push_back(sample);
             response.status = TakeSample::Response::SUCCESS;
 
-            std::string filename = "sample_" + request.bin + get_time_str() + ".bin";
+            std::string filename = "sample_" + request.bin + "_" + get_time_str() + ".bin";
             std::string path = vision_dir+"/samples/";
             serialze_msg(sample, path+filename);
         } else {
