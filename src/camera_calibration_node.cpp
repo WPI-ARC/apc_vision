@@ -21,6 +21,7 @@ EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3d)
 #include <cv_bridge/cv_bridge.h>
 // Image encodings
 #include <sensor_msgs/image_encodings.h>
+#include <geometry_msgs/PoseStamped.h>
 
 #include <XmlRpcValue.h>
 #include <moveit/move_group_interface/move_group.h>
@@ -47,9 +48,10 @@ const static std::string tool_frame = "/arm_left_link_tool0";
 
 class Calibrator {
 public:
-    Calibrator(ros::NodeHandle& nh, std::string filename, std::vector<geometry_msgs::Pose> poses) :
-        filename(filename), poses(poses), arm("arm_left_torso"),
-        left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this))
+    Calibrator(ros::NodeHandle& nh, std::string filename, std::vector<geometry_msgs::Pose> poses, Eigen::Affine3d color_depth_tf) :
+        filename(filename), poses(poses), arm("arm_left_torso"), color_depth_tf(color_depth_tf),
+        left_image_sub(nh.subscribe(left_image_topic, 1, &Calibrator::left_image_cb, this)),
+        camera_pose_pub(nh.advertise<geometry_msgs::PoseStamped>("camera_pose", 1))
     {
         arm.setPlannerId("RRTConnectkConfigDefault");
         arm.setPlanningTime(5.0);
@@ -61,7 +63,9 @@ protected:
     ros::Subscriber left_image_sub;
     boost::mutex image_mutex;
     tf::TransformListener listener;
+    ros::Publisher camera_pose_pub;
 
+    Eigen::Affine3d color_depth_tf;
     std::vector<geometry_msgs::Pose> poses;
     std::vector<Eigen::Affine3d> tool_base_tfs;
     std::vector<std::vector<cv::Point2f> > image_points;
@@ -225,27 +229,46 @@ public:
 
         Eigen::Matrix3d rotation = svd.matrixV() * I * svd.matrixU().transpose();
 
-        Eigen::Quaterniond quaternion(rotation);
-        Eigen::Vector3d translation(tool_points_centroid - rotation*cam_points_centroid);
-        Eigen::Affine3d bestTransform = Eigen::Translation3d(translation) * rotation;
+        Eigen::Vector3d color_translation(tool_points_centroid - rotation*cam_points_centroid);
+        Eigen::Quaterniond color_rotation(rotation);
+        Eigen::Affine3d bestTransform = Eigen::Translation3d(color_translation) * rotation;
+        Eigen::Affine3d tool_camera_tf = bestTransform * color_depth_tf;
+        std::cout << "\nColor Depth\n" << color_depth_tf.matrix() << std::endl;
         std::cout << "\nBest Transform\n" << bestTransform.matrix() << std::endl;
+        std::cout << "\nCorrected\n" << tool_camera_tf.matrix() << std::endl;
+
+        Eigen::Vector3d depth_translation(tool_camera_tf.translation());
+        Eigen::Quaterniond depth_rotation(tool_camera_tf.rotation());
         //bestTransform.rotation() = rotation;
         //bestTransform.translation() = cam_points_centroid - rotation*tool_points_centroid;
-
+        
         cv::FileStorage fs(filename, cv::FileStorage::WRITE);
         //fs << "cameraMatrix" << cameraMatrix;
         //fs << "distCoeffs" << distCoeffs;
-        fs << "camera_transform" << "{"
+        fs << "depth_optical_frame" << "{"
                << "position" <<"{"
-                   << "x" << translation.x()
-                   << "y" << translation.y()
-                   << "z" << translation.z()
+                   << "x" << depth_translation.x()
+                   << "y" << depth_translation.y()
+                   << "z" << depth_translation.z()
                << "}"
                << "orientation" << "{"
-                   << "x" << quaternion.x()
-                   << "y" << quaternion.y()
-                   << "z" << quaternion.z()
-                   << "w" << quaternion.w()
+                   << "x" << depth_rotation.x()
+                   << "y" << depth_rotation.y()
+                   << "z" << depth_rotation.z()
+                   << "w" << depth_rotation.w()
+               << "}"
+           << "}";
+        fs << "color_optical_frame" << "{"
+               << "position" <<"{"
+                   << "x" << color_translation.x()
+                   << "y" << color_translation.y()
+                   << "z" << color_translation.z()
+               << "}"
+               << "orientation" << "{"
+                   << "x" << color_rotation.x()
+                   << "y" << color_rotation.y()
+                   << "z" << color_rotation.z()
+                   << "w" << color_rotation.w()
                << "}"
            << "}";
         fs.release();
@@ -258,9 +281,12 @@ int main(int argc, char** argv) {
 
     std::string filename;
     XmlRpc::XmlRpcValue pose_config;
+    XmlRpc::XmlRpcValue color_offset;
+    Eigen::Affine3d color_depth_tf;
     std::vector<geometry_msgs::Pose> poses;
     nh.getParam("camera_calib", filename);
-    nh.getParam("calib_poses", pose_config);
+    nh.getParam("calibration_poses", pose_config);
+    nh.getParam("offset", color_offset);
 
     // Read in list of poses
     ROS_ASSERT(pose_config.getType() == XmlRpc::XmlRpcValue::TypeArray);
@@ -297,10 +323,28 @@ int main(int argc, char** argv) {
         poses.push_back(p);
     }
 
-    ros::AsyncSpinner spinner(1);
+    ROS_ASSERT(color_offset.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+    XmlRpc::XmlRpcValue rows = color_offset["rows"];
+    XmlRpc::XmlRpcValue cols = color_offset["cols"];
+    ROS_ASSERT(rows.getType() == XmlRpc::XmlRpcValue::TypeInt);
+    ROS_ASSERT(cols.getType() == XmlRpc::XmlRpcValue::TypeInt);
+    ROS_ASSERT(static_cast<int>(rows) == 4);
+    ROS_ASSERT(static_cast<int>(cols) == 4);
+    XmlRpc::XmlRpcValue data = color_offset["data"];
+    ROS_ASSERT(data.getType() == XmlRpc::XmlRpcValue::TypeArray);
+    ROS_ASSERT(data.size() == 16);
+    for(int i = 0; i < data.size(); ++i) {
+        XmlRpc::XmlRpcValue val = data[i];
+        ROS_ASSERT(val.getType() == XmlRpc::XmlRpcValue::TypeDouble);
+        color_depth_tf(i/4, i%4) = static_cast<double>(val);
+    }
+
+    std::cout << "Color -> Detph tf:\n" << color_depth_tf.matrix() << std::endl;
+
+    ros::AsyncSpinner spinner(4);
     spinner.start();
 
-    Calibrator calibrator(nh, filename, poses);
+    Calibrator calibrator(nh, filename, poses, color_depth_tf);
     sleep(1);
     calibrator.calibrate();
 

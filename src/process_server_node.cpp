@@ -258,6 +258,14 @@ protected:
             cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(sample.rgb, sensor_msgs::image_encodings::BGR8);
             ROS_DEBUG("Converting index image to OpenCV for object `%s'", object.c_str());
             cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(sample.indices, sensor_msgs::image_encodings::TYPE_32SC2);
+            if(!img_ptr) {
+                ROS_ERROR("Null pointer to rgb image");
+                return;
+            }
+            if(!ind_ptr) {
+                ROS_ERROR("Null pointer to index image");
+                return;
+            }
             ROS_DEBUG("Feature matching for object `%s'", object.c_str());
             std::vector<std::vector<cv::Point2f> > obj_bounds;
             float score = feature_matcher->second.detect(img_ptr->image, obj_bounds);
