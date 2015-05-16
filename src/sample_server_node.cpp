@@ -40,7 +40,8 @@ const static std::string left_camera_frame = "/camera_left_depth_optical_frame";
 
 class SampleServer {
 public:
-    SampleServer(ros::NodeHandle& nh) :
+    SampleServer(ros::NodeHandle& nh, std::string vision_dir) :
+        vision_dir(vision_dir),
         pointcloud_sub_left(nh, left_xyz_topic, 1),
         left_image_sub(nh.subscribe(left_image_topic, 1, &SampleServer::left_image_cb, this)),
         left_index_image_sub(nh, left_index_image_topic, 1),
@@ -53,6 +54,7 @@ public:
     }
 
 protected:
+    std::string vision_dir;
     message_filters::Subscriber<sensor_msgs::PointCloud2> pointcloud_sub_left;
     message_filters::Subscriber<sensor_msgs::Image> left_index_image_sub;
 
@@ -139,7 +141,8 @@ protected:
             response.status = TakeSample::Response::SUCCESS;
 
             std::string filename = "sample_" + request.bin + get_time_str() + ".bin";
-            serialze_msg(sample, filename);
+            std::string path = vision_dir+"/samples/";
+            serialze_msg(sample, path+filename);
         } else {
             response.status = TakeSample::Response::INVALID_COMMAND;
         }
@@ -161,9 +164,11 @@ protected:
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "sample_server_node");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh("~");
+    std::string vision_dir;
+    nh.getParam("vision_dir", vision_dir);
 
-    SampleServer server(nh);
+    SampleServer server(nh, vision_dir);
 
     ros::spin();
 }
