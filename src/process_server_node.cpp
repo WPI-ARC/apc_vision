@@ -95,7 +95,7 @@ struct PointCluster {
     {}
 };
 
-// This function is used to find the point cluster with the 
+// This function is used to find the point cluster with the
 // best score (higher is better)
 bool bestScoreComparison(const PointCluster &a, const PointCluster &b)
 {
@@ -300,36 +300,35 @@ protected:
 
                 ROS_DEBUG("Object min/max (%d, %d)->(%d, %d)", min_x, min_y, max_x, max_y);
 
-                int in_range=0, invalid=0, out_range=0;
                 for(int y = min_y; y <= max_y; ++y) {
                     for(int x = min_x; x <= max_x; ++x) {
                         // if point in quadrilateral TODO: Fix this check
                         if(true) {
                             int32_t index = ind_ptr->image.at<cv::Vec2i>(y,x)[1];
                             if(index >= 0 && index < cloud->points.size()) {
-                                cloud->points[index].id = string_to_id(object);
-                            } else if(index == -1) {++invalid;}
-                            else ++out_range;
+                                cloud->points[index].feature_id = string_to_id(object);
+                            }
                         }
                     }
                 }
-
-                int total = in_range+out_range+invalid;
-                ROS_DEBUG("%d/%d points invalid, %d/%d points out of range", invalid, total, out_range, total);
             }
         }
     }
     void detect_colors(std::string object, PointCloud::Ptr cloud, Sample& sample, std::vector<std::string> availableColors)
     {
         cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(sample.rgb, sensor_msgs::image_encodings::BGR8);
-        ROS_DEBUG("Converting index image to OpenCV for object `%s'", object.c_str());
-        cv_bridge::CvImagePtr contour_ptr = cv_bridge::toCvCopy(sample.rgb, sensor_msgs::image_encodings::BGR8);
-        std::vector<std::vector<cv::Point2f> > obj_bounds;
+        cv_bridge::CvImagePtr ind_ptr = cv_bridge::toCvCopy(sample.indices, sensor_msgs::image_encodings::TYPE_32SC2);
         for(int i = 0; i < availableColors.size(); i++)
         {
-            //TODO colors need scoring
-            if(colorDetectors.detect(object, img_ptr->image, contour_ptr->image, availableColors[i], obj_bounds))
-                ROS_DEBUG("Detected color %s", availableColors[i].c_str());
+            cv::Mat_<uint8_t> mask = colorDetectors.detect(object, img_ptr->image, availableColors[i]);
+            for(int y = 0; y < mask.rows; y++) {
+                for(int x = 0; x < mask.cols; x++) {
+                    int32_t index = ind_ptr->image.at<cv::Vec2i>(y,x)[1];
+                    if(index >= 0 && index < cloud->points.size()) {
+                        cloud->points[index].color_id = string_to_id(object);
+                    }
+                }
+            }
         }
 
     }
@@ -356,7 +355,7 @@ protected:
         {
             if(target!=binContents[i])
             {
-                std::vector <string> availableColors = config.calib[binContents[i]].colors;
+                std::vector<std::string> availableColors = config.calib[binContents[i]].colors;
                 for(int j = 0;j < config.calib[target].colors.size(); j++)
                 {
                     if (std::find(availableColors.begin(), availableColors.end(), config.calib[target].colors[j]) == availableColors.end())
@@ -382,7 +381,7 @@ protected:
         std::string object = request.samples.order.name;
         std::vector<std::string> binContents = request.samples.order.contents;
         std::vector<float> dims = config.calib[object].dimensions;
-        std::vector<Sample>& samples = request.samples.samples;
+        std::vector<Sample> samples = request.samples.samples;
         std::vector<PointCloud::Ptr> pcl_clouds(samples.size());
         std::vector<std::string> availableColors = findColors(object, binContents);
         for(int i = 0; i < samples.size(); ++i) {
@@ -469,16 +468,6 @@ protected:
             posestamped.header.frame_id = shelf_frame;
             posestamped.pose = response.result.pose;
 
-            bool success = listener.waitForTransform(shelf_frame, base_frame, stamp, ros::Duration(2.0));
-            // If transform isn't found in that time, give up
-            if(!success) {
-                ROS_ERROR("Couldn't lookup transform from shelf to base_link!");
-                return true;
-            }
-            listener.transformPose(base_frame, posestamped, posestamped);
-
-            response.result.pose = posestamped.pose;
-
             response.result.obb_extents.x = result.dimensions[0];
             response.result.obb_extents.y = result.dimensions[1];
             response.result.obb_extents.z = result.dimensions[2];
@@ -508,8 +497,19 @@ protected:
 
             pose_pub.publish(response.result.pose);
             showMarkers(result,result.dimensions);
+            pointcloud_pub.publish(response.result.pointcloud);
+
+            bool success = listener.waitForTransform(shelf_frame, base_frame, stamp, ros::Duration(2.0));
+            // If transform isn't found in that time, give up
+            if(!success) {
+                ROS_ERROR("Couldn't lookup transform from shelf to base_link!");
+                return true;
+            } else {
+                listener.transformPose(base_frame, posestamped, posestamped);
+            }
+
+            response.result.pose = posestamped.pose;
         }
-        pointcloud_pub.publish(out);
 
         samples.clear();
         return true;
@@ -550,6 +550,7 @@ protected:
             float boundingBoxProbability = scoreBoundingBox(object, segment, position, rotation, obb_dims);
             float featureMatchProbability = scoreFeatureMatch(object, segment, cloud, 1.0);
             float featureMatchWrongProbability = 1.0;
+            float colorMatchProbability = scoreColorMatch(object, segment, cloud, 1.0);
 
             // Factor in feature matching for non target objects
             for(int j = 0; j < others.size(); ++j) {
@@ -557,7 +558,7 @@ protected:
             }
 
 
-            float score = boundingBoxProbability * featureMatchProbability * featureMatchWrongProbability;
+            float score = boundingBoxProbability * featureMatchProbability * colorMatchProbability * featureMatchWrongProbability;
             ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
 
             PointCluster cluster;
@@ -585,11 +586,35 @@ protected:
         uint64_t obj_id = string_to_id(object);
 
         for(int i = 0; i < segment->points.size(); ++i) {
-            if(segment->points[i].id == obj_id) ++num_segment_points;
+            if(segment->points[i].feature_id == obj_id) ++num_segment_points;
         }
 
         for(int i = 0; i < cloud->points.size(); ++i) {
-            if(cloud->points[i].id == obj_id) ++num_total_points;
+            if(cloud->points[i].feature_id == obj_id) ++num_total_points;
+        }
+
+        if(num_total_points == 0) {
+            return default_score;
+        } else {
+            return (float)num_segment_points / (float)num_total_points;
+        }
+    }
+
+    float scoreColorMatch(
+        std::string object,
+        PointCloud::Ptr segment,
+        PointCloud::Ptr cloud,
+        float default_score)
+    {
+        int num_total_points = 0, num_segment_points = 0;
+        uint64_t obj_id = string_to_id(object);
+
+        for(int i = 0; i < segment->points.size(); ++i) {
+            if(segment->points[i].color_id == obj_id) ++num_segment_points;
+        }
+
+        for(int i = 0; i < cloud->points.size(); ++i) {
+            if(cloud->points[i].color_id == obj_id) ++num_total_points;
         }
 
         if(num_total_points == 0) {

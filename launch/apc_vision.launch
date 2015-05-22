@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <launch>
+    <arg name="sim" default="false"/>
     <arg name="camera_calib" value="$(find apc_vision)/config/camera_calib.yaml"/>
 
     <rosparam ns="sample_server_node" param="vision_dir" subst_value="True">$(find apc_vision)</rosparam>
@@ -8,15 +9,6 @@
     <rosparam ns="camera_calibration_node" param="camera_calib" subst_value="True">$(arg camera_calib)</rosparam>
     <rosparam command="load" file="$(arg camera_calib)"/>
     <rosparam ns="camera_calibration_node" command="load" file="$(find apc_vision)/config/calib_poses.yaml"/>
-
-    <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
-        <arg name="camera_name" value="camera_left"/>
-        <!--<arg name="device_serial_number" value="K8VF0780347000071P"/>-->
-        <arg name="device_serial_number" value="K8VF0780404000181V"/>
-        <!--<arg name="confidence_threshold" value="100"/>-->
-        <arg name="confidence_threshold" value="0"/>
-        <arg name="rgb_resolution" value="WXGA_H"/>
-    </include>
 
     <!--
     <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
@@ -60,6 +52,26 @@
       w: 2.2227851841943931e-02
     -->
 
-    <node name="sample_server" pkg="apc_vision" type="sample_server_node" output="screen" cwd="node"/>
+    <group unless="$(arg sim)">
+        <!-- Launch sample_server -->
+        <node name="sample_server" pkg="apc_vision" type="sample_server_node" output="screen" cwd="node"/>
+        <!-- Launch Camera Driver -->
+        <include file="$(find softkinetic_launch)/launch/creative_senz3d.launch">
+            <arg name="camera_name" value="camera_left"/>
+            <!--<arg name="device_serial_number" value="K8VF0780347000071P"/>-->
+            <arg name="device_serial_number" value="K8VF0780404000181V"/>
+            <!--<arg name="confidence_threshold" value="100"/>-->
+            <arg name="confidence_threshold" value="0"/>
+            <arg name="rgb_resolution" value="WXGA_H"/>
+        </include>
+    </group>
+
+    <group if="$(arg sim)">
+        <!-- Load config for fake samples -->
+        <rosparam ns="sample_server_node" command="load" file="$(find apc_vision)/config/samples.yaml"/>
+        <!-- Launch a fake sample_server -->
+        <node name="sample_server" pkg="apc_vision" type="fake_sample_server_node" output="screen" cwd="node"/>
+    </group>
+
     <node name="process_server" pkg="apc_vision" type="process_server_node" output="screen" cwd="node"/>
 </launch>

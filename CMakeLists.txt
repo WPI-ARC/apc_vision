@@ -132,6 +132,7 @@ include_directories(
 add_executable(sample_server_node src/sample_server_node.cpp src/ObjectIDs.cpp src/util.cpp)
 add_executable(process_server_node src/process_server_node.cpp src/ObjectRecognizer.cpp src/ColorDetector.cpp src/ObjectIDs.cpp src/util.cpp)
 add_executable(camera_calibration_node src/camera_calibration_node.cpp)
+add_executable(fake_sample_server_node src/fake_sample_server_node.cpp)
 add_dependencies(sample_server_node ${PROJECT_NAME}_gencpp)
 add_dependencies(process_server_node ${PROJECT_NAME}_gencpp)
 
@@ -163,6 +164,13 @@ target_link_libraries(camera_calibration_node
   ${Boost_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+
+target_link_libraries(fake_sample_server_node
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
 
 # target_link_libraries(three_pose_capture
 #   ${catkin_LIBRARIES}
