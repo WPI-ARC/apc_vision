@@ -349,8 +349,11 @@ protected:
     }
     std::vector <std::string> findColors(std::string target, std::vector<std::string> binContents)
     {
-        bool colorConflict = false;
-        std::vector <std::string> colors;
+        std::vector<std::string> targetColors = config.calib[target].colors;
+        if( binContents.size() == 0 )
+        {
+            return targetColors;
+        }
         for(int i = 0; i < binContents.size(); i++)
         {
             if(target!=binContents[i])
@@ -358,23 +361,15 @@ protected:
                 std::vector<std::string> availableColors = config.calib[binContents[i]].colors;
                 for(int j = 0;j < config.calib[target].colors.size(); j++)
                 {
-                    if (std::find(availableColors.begin(), availableColors.end(), config.calib[target].colors[j]) == availableColors.end())
+                    std::vector<std::string>::iterator it = std::find(availableColors.begin(), availableColors.end(), config.calib[target].colors[j]);
+                    if ( it != availableColors.end())
                     {
-                        colors.push_back(config.calib[target].colors[j]);
-                    }
-                    else
-                    {
-                        colors.empty();
-                        colorConflict = true;
-                        break;
+                        targetColors.erase(it);
                     }
                 }
             }
-            if(colorConflict == true)
-                break;
         }
-        return colors;
-
+        return targetColors;
     }
 
     bool process_cb(ProcessSamples::Request& request, ProcessSamples::Response& response) {
