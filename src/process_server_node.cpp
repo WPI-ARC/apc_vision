@@ -391,10 +391,11 @@ protected:
                 ROS_WARN("Empty pointcloud from sample %d\n", i);
                 continue;
             }
+            detect_colors(object, pcl_clouds[i], samples[i], availableColors);
+            feature_match(object, pcl_clouds[i], samples[i]);
             // Run feature matching
             for(int j = 0; j < binContents.size(); ++j) {
                 feature_match(binContents[j], pcl_clouds[i], samples[i]);
-                detect_colors(binContents[j], pcl_clouds[i], samples[i], availableColors);
             }
             // Use icp to match clouds
             if(i > 0) { align(pcl_clouds[i], pcl_clouds[0]); }
@@ -554,7 +555,7 @@ protected:
 
 
             float score = boundingBoxProbability * featureMatchProbability * colorMatchProbability * featureMatchWrongProbability;
-            ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, score);
+            ROS_INFO("Segment[%d] probabilities for object `%s'; box: %f, feature: %f, feature-inv: %f, color: %f, total: %f", i, object.c_str(), boundingBoxProbability, featureMatchProbability, featureMatchWrongProbability, colorMatchProbability, score);
 
             PointCluster cluster;
             cluster.score = score;

@@ -249,8 +249,8 @@ cv::Mat ColorDetector::detect(string objectName, Mat src, string colorName) {
     Mat_<uint8_t> object = imgThresholded;
     //Draw the contour and rectangle
     if (largest_area > 1000) {
-        Mat mask;
-        drawContours(mask, contours, largest_contour_index, Scalar(255));
+        Mat_<uint8_t> mask(object.size());
+        drawContours(mask, contours, largest_contour_index, Scalar(255), -1);
         bitwise_and(object, mask, object);
     } else {
         object = cv::Mat_<uint8_t>::zeros(imgHSV.size());
