@@ -1,23 +1,23 @@
 %YAML:1.2
 objects:
     cheezit_big_original: 
-        files: ['images/cheezit.jpg']
+        files: ['images/cheezit_big_original_1.jpg', 'images/cheezit_big_original_2.jpg', 'images/cheezit_big_original_3.jpg', 'images/cheezit_big_original_4.jpg', 'images/cheezit_big_original_5.jpg', 'images/cheezit_big_original_6.jpg']
         size: [0.062, 0.16, 0.226]
         colors: ['orange', 'yellow', 'red']
     genuine_joe_plastic_stir_sticks:
-        files: ['images/stirsticks.jpg']
+        files: ['images/genuine_joe_plastic_stir_sticks_1.jpg', 'images/genuine_joe_plastic_stir_sticks_2.jpg', 'images/genuine_joe_plastic_stir_sticks_3.jpg', 'images/genuine_joe_plastic_stir_sticks_4.jpg', 'images/genuine_joe_plastic_stir_sticks_5.jpg']
         size: [0.095, 0.107, 0.145]
         colors: ['red', 'orange']
     crayola_64_ct:
-        files: ['images/crayola.jpg']
+        files: ['images/crayola_64_ct_1.jpg', 'images/crayola_64_ct_2.jpg', 'images/crayola_64_ct_3.jpg', 'images/crayola_64_ct_4.jpg', 'images/crayola_64_ct_5.jpg']
         size: [0.037, 0.125, 0.145]
         colors: ['yellow', 'green', 'blue', 'orange']
     expo_dry_erase_board_eraser:
-        files: ['images/expo.jpg']
+        files: ['images/expo_dry_erase_board_eraser_1.jpg']
         size: [0.035, 0.055, 0.13]
         colors: ['blue', 'green', 'yellow']
     elmers_washable_no_run_school_glue:
-        files: ['images/glue.jpg']
+        files: ['images/elmers_washable_no_run_school_glue_1.jpg']
         size: [0.025, 0.06, 0.145]
         colors: ['blue', 'orange', 'red']
     kyjen_squeakin_eggs_plush_puppies:
@@ -41,7 +41,7 @@ objects:
         size: [0.055, 0.09, 0.19]
         colors: ['white']
     sharpie_accent_tank_style_highlighters:
-        files: []
+        files: ['images/sharpie_accent_tank_style_highlighters_1.jpg']
         size: [0.023, 0.116, 0.125]
         colors: ['orange', 'blue', 'green']
     stanley_66_052:
@@ -57,7 +57,7 @@ objects:
         size: [0.016, 0.05, 0.195]
         colors: ['blue']
     mark_twain_huckleberry_finn:
-        files: []
+        files: ['images/mark_twain_huckleberry_finn.jpg', 'images/mark_twain_huckleberry_finn_1.jpg']
         size: [0.012, 0.132, 0.21]
         colors: ['green', 'blue', 'yellow']
     first_years_take_and_toss_straw_cup:
@@ -65,7 +65,7 @@ objects:
         size: [0.08, 0.09, 0.17]
         colors: ['blue', 'yellow', 'orange', 'red']
     feline_greenies_dental_treats:
-        files: []
+        files: ['images/feline_greenies_dental_treats_1.jpg', 'images/feline_greenies_dental_treats_2.jpg']
         size: [0.04, 0.175, 0.21]
         colors: ['green', 'yellow', 'orange']
     laugh_out_loud_joke_book:
@@ -100,10 +100,6 @@ objects:
         files: []
         size: [0.05, 0.107, 0.305]
         colors: ['blue', 'green']
-    test_object:
-        files: []
-        size: [0.0, 0.0, 0.0]
-        colors: []
 shelf:
     A: [-0.43, -.02,  0.17764, 0.39,    1.55794, 1.77212]
     B: [-0.43, -.02, -0.12, 0.14331, 1.55794, 1.77212]

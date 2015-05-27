@@ -323,7 +323,9 @@ protected:
             cv::Mat_<uint8_t> mask = colorDetectors.detect(object, img_ptr->image, availableColors[i]);
             for(int y = 0; y < mask.rows; y++) {
                 for(int x = 0; x < mask.cols; x++) {
-                    int32_t index = ind_ptr->image.at<cv::Vec2i>(y,x)[1];
+                    int y_ind = (y * ind_ptr->image.size().height) / img_ptr->image.size().height;
+                    int x_ind = (x * ind_ptr->image.size().width) / img_ptr->image.size().width;
+                    int32_t index = ind_ptr->image.at<cv::Vec2i>(y_ind,x_ind)[1];
                     if(index >= 0 && index < cloud->points.size()) {
                         cloud->points[index].color_id = string_to_id(object);
                     }
