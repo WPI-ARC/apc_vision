@@ -363,10 +363,13 @@ protected:
                 std::vector<std::string> availableColors = config.calib[binContents[i]].colors;
                 for(int j = 0;j < config.calib[target].colors.size(); j++)
                 {
+
+
                     std::vector<std::string>::iterator it = std::find(availableColors.begin(), availableColors.end(), config.calib[target].colors[j]);
                     if ( it != availableColors.end())
                     {
-                        targetColors.erase(it);
+                        std::vector<std::string>::iterator targetColors_itr = std::find(targetColors.begin(), targetColors.end(), config.calib[target].colors[j]);
+                        targetColors.erase(targetColors_itr);
                     }
                 }
             }
@@ -380,6 +383,10 @@ protected:
         std::vector<float> dims = config.calib[object].dimensions;
         std::vector<Sample> samples = request.samples.samples;
         std::vector<PointCloud::Ptr> pcl_clouds(samples.size());
+
+        DuplicateChecker pred(object);
+        std::remove_if(binContents.begin(), binContents.end(), pred);
+
         std::vector<std::string> availableColors = findColors(object, binContents);
         for(int i = 0; i < samples.size(); ++i) {
             PointCloud::Ptr cloud(new PointCloud);
@@ -417,8 +424,6 @@ protected:
             return true;
         }
 
-        DuplicateChecker pred(object);
-        std::remove_if(binContents.begin(), binContents.end(), pred);
         std::vector<PointCluster> clusters = segmentCloud(out, object, binContents);
 
         if(config.calib.find(object) == config.calib.end()) {
@@ -495,7 +500,7 @@ protected:
 
             pose_pub.publish(response.result.pose);
             showMarkers(result,result.dimensions);
-            pointcloud_pub.publish(response.result.pointcloud);
+            //pointcloud_pub.publish(response.result.pointcloud);
 
             bool success = listener.waitForTransform(shelf_frame, base_frame, stamp, ros::Duration(2.0));
             // If transform isn't found in that time, give up
@@ -673,7 +678,7 @@ protected:
                 if(i == j) continue;
                 for(int k = 0; k < 3; k++) {
                     if(k == i || k == j) continue;
-                    float score = 0.0; 
+                    float score = 0.0;
                     score += std::abs(sensed_dims[0] - known_dims[i]);
                     score += std::abs(sensed_dims[1] - known_dims[j]);
                     score += std::abs(sensed_dims[2] - known_dims[k]);
@@ -753,7 +758,7 @@ int main(int argc, char** argv) {
             boost::filesystem::path image_path(files[i]);
             // If the path to an image isn't absolute, assume it's
             // relative to where the config file is
-            if(!image_path.is_absolute()) 
+            if(!image_path.is_absolute())
                 files[i] = (config_path.parent_path() / files[i]).string();
         }
 

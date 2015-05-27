@@ -10,16 +10,15 @@
     <rosparam command="load" file="$(arg camera_calib)"/>
     <rosparam ns="camera_calibration_node" command="load" file="$(find apc_vision)/config/calib_poses.yaml"/>
 
+    
     <!--
-    <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
-          args="-0.00141 0.11066 0.021467 0.0523598776 3.1415926535 -1.57079633 /arm_left_link_tool0 /camera_left_depth_optical_frame 100"/>
-    -->
-    <!--
-    <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
-          args="-0.00141 0.11066 0.021467 0.013932 0.71415 0.699498 0.0222278 /arm_left_link_tool0 /camera_left_depth_optical_frame 100"/>
-    -->
     <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
           args="-0.0088927 0.089071 0.0127268 0.01310213 0.718851 0.694928 0.0124387 /arm_left_link_tool0 /camera_left_depth_optical_frame 100"/>
+    -->
+    <node name="left_palm_camera_tf" pkg="tf" type="static_transform_publisher"
+          args="-0.01307966 0.1130501 -0.013226137 0.0042806188 0.71881989 0.695118999 0.0094451261 /arm_left_link_tool0 /camera_left_depth_optical_frame 100"/>
+
+
       <!--
    position:
       x: -8.8927993031216838e-03
