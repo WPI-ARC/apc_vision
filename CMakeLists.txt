@@ -133,8 +133,14 @@ add_executable(sample_server_node src/sample_server_node.cpp src/ObjectIDs.cpp s
 add_executable(process_server_node src/process_server_node.cpp src/ObjectRecognizer.cpp src/ColorDetector.cpp src/ObjectIDs.cpp src/util.cpp)
 add_executable(camera_calibration_node src/camera_calibration_node.cpp)
 add_executable(fake_sample_server_node src/fake_sample_server_node.cpp)
+add_executable(test_sample_node src/test_sample_node.cpp)
+add_executable(view_sample src/view_sample.cpp)
+add_executable(color_test src/color_test.cpp src/ColorDetector.cpp src/ObjectIDs.cpp)
 add_dependencies(sample_server_node ${PROJECT_NAME}_gencpp)
 add_dependencies(process_server_node ${PROJECT_NAME}_gencpp)
+add_dependencies(test_sample_node ${PROJECT_NAME}_gencpp)
+add_dependencies(view_sample ${PROJECT_NAME}_gencpp)
+add_dependencies(color_test ${PROJECT_NAME}_gencpp)
 
 
 # add_executable(three_pose_capture src/three_pose_capture.cpp)
@@ -171,6 +177,23 @@ target_link_libraries(fake_sample_server_node
   ${PCL_LIBRARIES}
 )
 
+target_link_libraries(test_sample_node
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+target_link_libraries(view_sample
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+target_link_libraries(color_test
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
 
 # target_link_libraries(three_pose_capture
 #   ${catkin_LIBRARIES}
